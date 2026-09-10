@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#443a7d"/>
+      <stop offset="52%" stop-color="#2b2555"/>
+      <stop offset="100%" stop-color="#181a2b"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.40" r="0.58">
+      <stop offset="0%" stop-color="#93a8ff" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#93a8ff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="hair" x1="0.28" y1="0" x2="0.72" y2="1">
+      <stop offset="0%" stop-color="#7c6fc4"/>
+      <stop offset="55%" stop-color="#574c96"/>
+      <stop offset="100%" stop-color="#3a3273"/>
+    </linearGradient>
+    <linearGradient id="skin" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffe9db"/>
+      <stop offset="100%" stop-color="#f8ccb4"/>
+    </linearGradient>
+    <linearGradient id="iris" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#4b6bd8"/>
+      <stop offset="100%" stop-color="#22305f"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="512" height="512" rx="116" fill="url(#bg)"/>
+  <rect width="512" height="512" rx="116" fill="url(#glow)"/>
+
+  <!-- 后发 -->
+  <path d="M256 82c-97 0-158 69-158 159 0 76 15 136 36 181h244c21-45 36-105 36-181 0-90-61-159-158-159z"
+        fill="url(#hair)"/>
+
+  <!-- 两侧发束 -->
+  <path d="M138 200c-16 46-16 106-2 146 5 14 22 15 28 3 9-17 11-45 6-70-7-34-19-63-32-79z"
+        fill="url(#hair)"/>
+  <path d="M374 200c16 46 16 106 2 146-5 14-22 15-28 3-9-17-11-45-6-70 7-34 19-63 32-79z"
+        fill="url(#hair)"/>
+
+  <!-- 耳朵 -->
+  <ellipse cx="157" cy="266" rx="15" ry="22" fill="#f6c4aa"/>
+  <ellipse cx="355" cy="266" rx="15" ry="22" fill="#f6c4aa"/>
+
+  <!-- 脸 -->
+  <ellipse cx="256" cy="254" rx="101" ry="112" fill="url(#skin)"/>
+
+  <!-- 刘海 -->
+  <path d="M256 104c-76 0-121 47-127 109 7-19 25-44 49-52 28-10 43 11 78 11s50-21 78-11c24 8 42 33 49 52-6-62-51-109-127-109z"
+        fill="url(#hair)"/>
+  <path d="M256 104c-30 0-55 7-74 20 22 6 40 22 48 44 9-24 24-40 45-46-6-12-11-18-19-18z"
+        fill="#8e82d6" opacity="0.30"/>
+
+  <!-- 眉毛 -->
+  <path d="M186 232c8-5 20-5 27-1" stroke="#4a3f86" stroke-width="7" fill="none" stroke-linecap="round"/>
+  <path d="M299 231c7-4 19-4 27 1" stroke="#4a3f86" stroke-width="7" fill="none" stroke-linecap="round"/>
+
+  <!-- 眼睛 -->
+  <ellipse cx="209" cy="271" rx="28" ry="33" fill="#ffffff"/>
+  <ellipse cx="303" cy="271" rx="28" ry="33" fill="#ffffff"/>
+  <ellipse cx="210" cy="273" rx="22" ry="28" fill="url(#iris)"/>
+  <ellipse cx="302" cy="273" rx="22" ry="28" fill="url(#iris)"/>
+  <circle cx="210" cy="273" r="10" fill="#141a33"/>
+  <circle cx="302" cy="273" r="10" fill="#141a33"/>
+  <circle cx="201" cy="262" r="9" fill="#ffffff"/>
+  <circle cx="293" cy="262" r="9" fill="#ffffff"/>
+  <circle cx="216" cy="285" r="5" fill="#ffffff" opacity="0.75"/>
+  <circle cx="308" cy="285" r="5" fill="#ffffff" opacity="0.75"/>
+
+  <!-- 腮红 -->
+  <ellipse cx="172" cy="309" rx="25" ry="11" fill="#ff9fb2" opacity="0.45"/>
+  <ellipse cx="340" cy="309" rx="25" ry="11" fill="#ff9fb2" opacity="0.45"/>
+
+  <!-- 嘴 -->
+  <path d="M243 323c6 9 20 9 26 0" stroke="#c96f5e" stroke-width="6.5" fill="none"
+        stroke-linecap="round"/>
+
+  <!-- 星星 -->
+  <path d="M108 140l6 17 17 6-17 6-6 17-6-17-17-6 17-6z" fill="#ffe08a" opacity="0.92"/>
+  <path d="M406 186l5 13 13 5-13 5-5 13-5-13-13-5 13-5z" fill="#9fd8ff" opacity="0.85"/>
+  <path d="M372 108l3 9 9 3-9 3-3 9-3-9-9-3 9-3z" fill="#ffd0e0" opacity="0.8"/>
+</svg>

@@ -1,0 +1,250 @@
+{
+  "version": 1,
+  "note": "背景声的音轨定义。全部由 WebAudio 现场合成，**不含任何音频文件**——所以这个 App 的体积不会因为加了音乐而变大，也永远不会去网上取资源。每条音轨只是一组合成参数。",
+  "why_synthesized": "为什么不用现成音频文件：APK 现在是 0.45 MB，一首 3 分钟的 mp3 至少 3–5 MB，几首就是十倍以上，而且还要处理版权。而这几类声音本来就可以合成——噪声加滤波器就是海浪和风，雨是一颗颗离散的雨滴（带通滤过的噪声短促爆发）叠出来的，两个振荡器左右耳差几个赫兹就是双耳节拍。用合成换来的另一个好处是它真的无限长：循环段有十几秒到几十秒，短时间里听不出接缝，也不会像一首歌那样放完就结束。",
+  "evidence": {
+    "headline": "有证据的是「听一点舒缓的声音」这件事本身，不是双耳节拍。",
+    "sound": "听音乐/自然声可以降低焦虑——这是这一块里证据最稳的一条。音乐干预的元分析（累计九千多名被试）报告的焦虑下降幅度「与部分药物干预相当」；术前焦虑的 Cochrane 综述方向也一致。所以「听点东西能松下来」是站得住的。",
+    "binaural": "双耳节拍（左右耳差几赫兹）那部分要小心。被引最多的是 Garcia-Argibay 等 2019 的元分析（22 项研究），总体效应 g≈0.45–0.58，作者自己说是「有希望但不算确证」。反驳的证据也不少：2023 年一篇脑电「脑波牵引」综述里，14 项研究只有 5 项支持牵引假说、8 项相反；2023 年一项大型居家试验里双耳节拍让学习任务表现略**变差**；还有综述指出双耳节拍的皮层牵引本身比单耳节拍/等时节拍**更弱**，所以那些好处可能来自唤醒度和注意，而不是频率本身。",
+    "confound": "最要命的一点：绝大多数实验是把节拍**混在音乐里**放的，所以分不清效果是节拍的还是音乐的。有 2022 年的双盲试验发现 ASMR 和「双耳节拍+音乐」效果一样好；2025 年一项 n≈308 的随机对照发现**单耳**节拍加音乐同样能降低急性焦虑——都不支持「双耳」有什么特别之处。",
+    "practical": "所以这里的实用结论只有一句：**把它当低风险的小工具用，效果主要来自「安静听一会儿」这件事。** 别指望它治焦虑；如果你确实焦虑到影响生活，那是要看医生的事，不是换个音轨的事。",
+    "safe": "几件具体的事：双耳节拍**必须戴耳机**（两个频率要分别进两只耳朵，外放就不是双耳节拍了，会变成一种颤音）；音量从低开始，听久了别调大；有不舒服（头晕、头痛、烦躁）就停；有癫痫或抽搐史的话先问医生——节律性的声刺激属于要先问过再用的那类。"
+  },
+  "default_track": "rain",
+  "default_volume": 0.22,
+  "tracks": [
+    {
+      "id": "rain",
+      "name": "小雨",
+      "kind": "rain",
+      "headphone": false,
+      "desc": "细密的小雨。不是一片连续的白噪，而是成千上万个离散雨滴撞出来的「沙沙」颗粒，底下垫一层很闷的底噪。整段是事先算好再循环的，所以不会重复成一个节拍。",
+      "params": {
+        "bufferSeconds": 16,
+        "bed": {
+          "lowpass": 520,
+          "gain": 0.34
+        },
+        "drops": {
+          "perSecond": 30,
+          "fMin": 800,
+          "fMax": 3800,
+          "decay": 0.01,
+          "q": 1.1,
+          "gain": 0.62
+        },
+        "highpass": 110,
+        "lowpass": 5000,
+        "mixGain": 1,
+        "gain": 1.0
+      }
+    },
+    {
+      "id": "rain-heavy",
+      "name": "大雨",
+      "kind": "rain",
+      "headphone": false,
+      "desc": "密而低的雨。雨滴更大更闷、落得更密，下面还压着一层低频的轰鸣——比「小雨」更有包住感，也更响一点。",
+      "params": {
+        "bufferSeconds": 16,
+        "bed": {
+          "lowpass": 380,
+          "gain": 0.44
+        },
+        "drops": {
+          "perSecond": 62,
+          "fMin": 560,
+          "fMax": 2600,
+          "decay": 0.019,
+          "q": 1.0,
+          "gain": 0.55
+        },
+        "highpass": 70,
+        "lowpass": 3600,
+        "mixGain": 1,
+        "layer": {
+          "color": "brown",
+          "lowpass": 160,
+          "gain": 0.3
+        },
+        "gain": 1.0
+      }
+    },
+    {
+      "id": "waves",
+      "name": "海浪",
+      "kind": "noise",
+      "headphone": false,
+      "desc": "一涨一落，周期约 14 秒。靠滤波器缓慢扫动做出来的。",
+      "params": {
+        "color": "brown",
+        "lowpass": 900,
+        "lowpassLfo": 0.07,
+        "lowpassDepth": 600,
+        "highpass": 80,
+        "gain": 1.0,
+        "tremolo": 0.07,
+        "tremoloDepth": 0.35
+      }
+    },
+    {
+      "id": "wind",
+      "name": "风",
+      "kind": "noise",
+      "headphone": false,
+      "desc": "比雨更空，带一点呼啸。滤波器的中心频率在 300–900 之间来回走。",
+      "params": {
+        "color": "pink",
+        "bandpass": 550,
+        "bandpassLfo": 0.05,
+        "bandpassDepth": 320,
+        "gain": 0.85,
+        "tremolo": 0.09,
+        "tremoloDepth": 0.25
+      }
+    },
+    {
+      "id": "drone-low",
+      "name": "低频铺底",
+      "kind": "drone",
+      "headphone": false,
+      "desc": "三个正弦音（55 / 82.5 / 110 赫兹）搭成一个很低的持续音。几乎没有旋律，就是一块声音。",
+      "params": {
+        "voices": [
+          55,
+          82.5,
+          110
+        ],
+        "type": "sine",
+        "detune": 3,
+        "tremolo": 0.08,
+        "tremoloDepth": 0.3,
+        "gain": 0.5
+      }
+    },
+    {
+      "id": "drone-warm",
+      "name": "暖垫",
+      "kind": "drone",
+      "headphone": false,
+      "desc": "比上面高一个八度，三角波，带一点粗糙感。像远处有人在按一个和弦不动。",
+      "params": {
+        "voices": [
+          146.8,
+          220,
+          293.7
+        ],
+        "type": "triangle",
+        "detune": 5,
+        "tremolo": 0.06,
+        "tremoloDepth": 0.22,
+        "gain": 0.34
+      }
+    },
+    {
+      "id": "binaural-4",
+      "name": "双耳 · 4 赫兹",
+      "kind": "binaural",
+      "headphone": true,
+      "desc": "左耳 200 赫兹、右耳 204 赫兹。相差 4 赫兹，落在 θ 波段。",
+      "params": {
+        "carrier": 200,
+        "beat": 4,
+        "gain": 0.4
+      }
+    },
+    {
+      "id": "binaural-6",
+      "name": "双耳 · 6 赫兹",
+      "kind": "binaural",
+      "headphone": true,
+      "desc": "相差 6 赫兹。θ 波段里被研究得较多的一档。",
+      "params": {
+        "carrier": 200,
+        "beat": 6,
+        "gain": 0.4
+      }
+    },
+    {
+      "id": "binaural-10",
+      "name": "双耳 · 10 赫兹",
+      "kind": "binaural",
+      "headphone": true,
+      "desc": "相差 10 赫兹，落在 α 波段。闭眼放松时人自己也会出现这个节律。",
+      "params": {
+        "carrier": 200,
+        "beat": 10,
+        "gain": 0.4
+      }
+    },
+    {
+      "id": "stream",
+      "name": "溪流",
+      "kind": "noise",
+      "headphone": false,
+      "desc": "比雨更亮、更碎，起伏快一点，像水流过石头。",
+      "params": {
+        "color": "pink",
+        "highpass": 400,
+        "bandpass": 2200,
+        "bandpassLfo": 0.5,
+        "bandpassDepth": 900,
+        "gain": 0.7,
+        "tremolo": 0.6,
+        "tremoloDepth": 0.22
+      }
+    },
+    {
+      "id": "white",
+      "name": "白噪（盖环境音）",
+      "kind": "noise",
+      "headphone": false,
+      "desc": "不是用来听的，是用来盖的。想压掉环境里的说话声、键盘声时用它。声音很平，听久了容易烦，所以它是工具不是享受。",
+      "params": {
+        "color": "white",
+        "lowpass": 8000,
+        "gain": 0.5
+      }
+    },
+    {
+      "id": "deep-night",
+      "name": "深夜",
+      "kind": "drone",
+      "headphone": false,
+      "desc": "很低的铺底（55 赫兹）+ 一层棕噪。几乎是感觉而不是声音，适合睡前或需要安静下来的时候。",
+      "params": {
+        "voices": [
+          55,
+          82.5
+        ],
+        "type": "sine",
+        "detune": 2,
+        "tremolo": 0.05,
+        "tremoloDepth": 0.18,
+        "gain": 0.42,
+        "layer_noise": {
+          "color": "brown",
+          "lowpass": 180,
+          "gain": 0.5
+        }
+      }
+    },
+    {
+      "id": "murmur",
+      "name": "远处的人声",
+      "kind": "noise",
+      "headphone": false,
+      "desc": "像隔壁房间或咖啡馆里有人在说话，但听不清内容。是合成出来的，不是录音——所以别指望有真的杯盘声。",
+      "params": {
+        "color": "pink",
+        "bandpass": 700,
+        "bandpassLfo": 0.13,
+        "bandpassDepth": 320,
+        "highpass": 200,
+        "gain": 0.42,
+        "tremolo": 0.23,
+        "tremoloDepth": 0.55
+      }
+    }
+  ]
+}

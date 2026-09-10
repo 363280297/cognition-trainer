@@ -1,0 +1,1046 @@
+:root {
+  --bg: #12131a;
+  --panel: #1b1d27;
+  --panel2: #23262f;
+  --line: #2e323e;
+  --text: #e8eaf0;
+  --dim: #9aa0b0;
+  --accent: #6c8cff;
+  --good: #43c98b;
+  --warn: #e0b84c;
+  --bad: #e06c6c;
+  --radius: 14px;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+        "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  /* 78 只够避开底部 tab 栏，但「卡住了」浮标还悬在它上方（74~110px），
+     留 122 才能让最后一张卡的正文滚出浮标的遮挡。
+     后来又加了「♪声音」按钮，它在 bottom:122px 的位置，也就是占住 122~160px
+     这一段——比「卡住了」还高。所以这里加到 170，否则对话页最后那张卡
+     （输入框那一行）会正好压在它后面：实测「提示」按钮就被它盖住了。
+     这个坑的形状是「浮标比预留的位置高」，改浮标位置时记得回头改这个数。 */
+  padding-bottom: 170px;
+  min-height: 100vh;
+}
+h1, h2, h3 { margin: 0; font-weight: 650; }
+h2 { font-size: 1.15rem; }
+h3 { font-size: 1rem; }
+p { margin: 0 0 .7em; }
+
+/* ---------- header ---------- */
+.top {
+  position: sticky; top: 0; z-index: 20;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px 10px;
+  background: rgba(18,19,26,.92);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--line);
+}
+.brand { display: flex; align-items: center; gap: 8px; }
+.brand h1 { font-size: 1.05rem; letter-spacing: .06em; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dim); }
+.dot.on { background: var(--good); box-shadow: 0 0 8px var(--good); }
+.dot.off { background: var(--warn); }
+.stats { display: flex; gap: 6px; }
+.chip {
+  font-size: .74rem; color: var(--dim);
+  background: var(--panel); border: 1px solid var(--line);
+  padding: 3px 9px; border-radius: 999px; white-space: nowrap;
+}
+button.chip.gear { cursor: pointer; font: inherit; font-size: .82rem; line-height: 1; padding: 5px 9px; }
+
+/* ---------- skill meters ---------- */
+.meters {
+  display: flex; gap: 8px; padding: 10px 16px;
+  background: var(--panel); border-bottom: 1px solid var(--line);
+}
+.meter { flex: 1; }
+.meter span { display: flex; justify-content: space-between; font-size: .7rem; color: var(--dim); }
+.bar { height: 4px; background: var(--line); border-radius: 999px; margin-top: 5px; overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--accent); border-radius: 999px;
+         transition: width .45s ease; }
+
+/* ---------- layout ---------- */
+main { padding: 16px; max-width: 720px; margin: 0 auto; }
+.card {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 16px; margin-bottom: 14px;
+}
+.meta { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.tag {
+  font-size: .7rem; color: var(--dim); border: 1px solid var(--line);
+  background: var(--panel2); padding: 2px 8px; border-radius: 6px;
+}
+.tag.lv-A { color: var(--good); border-color: #2c5d47; }
+.tag.lv-B { color: var(--warn); border-color: #5d4f2c; }
+.tag.lv-C { color: var(--bad); border-color: #5d2c2c; }
+.tag.type { color: var(--accent); border-color: #2f3f6e; }
+.tag.dom { color: #b98ce8; border-color: #4d3d63; }
+
+/* 筛选条 */
+.chips { display: flex; gap: 7px; flex-wrap: wrap; margin-bottom: 13px; }
+.chip-btn {
+  background: var(--panel); color: var(--dim); border: 1px solid var(--line);
+  border-radius: 999px; padding: 6px 13px; font: inherit; font-size: .82rem; cursor: pointer;
+}
+.chip-btn em { font-style: normal; opacity: .6; font-size: .74rem; }
+.chip-btn:hover { border-color: #48506a; }
+.chip-btn.on { background: #2c3766; color: #dfe6ff; border-color: #4a5da0; }
+.series-note {
+  font-size: .84rem; color: var(--dim); background: var(--panel);
+  border: 1px solid var(--line); border-left: 3px solid #6b5a86;
+  border-radius: 0 10px 10px 0; padding: 10px 13px; margin: 0 0 13px;
+}
+
+.scene { color: var(--dim); font-size: .86rem; margin-bottom: 12px; }
+.quote {
+  font-size: 1.12rem; line-height: 1.5; padding: 12px 14px; margin: 0 0 12px;
+  background: var(--panel2); border-left: 3px solid var(--accent);
+  border-radius: 0 8px 8px 0;
+  /* pre-line：让 quote 里的换行真的换行。原来都是单句，换行会被 HTML 折叠掉；
+     加了「怎么接话」那一类卡片之后，quote 变成一小段对话记录（每句一行），
+     折掉就没法看了。对单句的卡没有影响。 */
+  white-space: pre-line;
+}
+.prompt { font-size: .94rem; color: var(--dim); margin-bottom: 10px; }
+
+/* ---------- options ---------- */
+.opts { display: flex; flex-direction: column; gap: 8px; }
+.opt {
+  text-align: left; width: 100%; cursor: pointer;
+  background: var(--panel2); color: var(--text);
+  border: 1px solid var(--line); border-radius: 10px;
+  padding: 12px 14px; font: inherit; font-size: .93rem; line-height: 1.5;
+  transition: border-color .15s, background .15s;
+}
+.opt:hover:not(:disabled) { border-color: #48506a; }
+.opt:disabled { cursor: default; opacity: 1; }
+.opt .k { color: var(--dim); font-weight: 650; margin-right: 8px; }
+.opt.right { border-color: var(--good); background: #16301f; }
+.opt.half  { border-color: var(--warn); background: #2f2913; }
+.opt.wrong { border-color: var(--bad);  background: #2f1a1a; }
+.opt.dim   { opacity: .5; }
+
+/* ---------- verdict buttons ---------- */
+.verdicts { display: flex; gap: 8px; }
+.verdicts .opt { text-align: center; font-weight: 600; }
+.verdicts .opt.right { background: #16301f; }
+
+/* ---------- feedback ---------- */
+.fb { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 14px; }
+.fb h3 { margin-bottom: 8px; font-size: .95rem; }
+.fb .label { color: var(--dim); font-size: .78rem; margin-bottom: 2px; }
+.block { margin-bottom: 12px; }
+.block:last-child { margin-bottom: 0; }
+.hint { color: var(--dim); font-size: .84rem; }
+.result-good { color: var(--good); }
+.result-half { color: var(--warn); }
+.result-bad  { color: var(--bad); }
+
+/* ---------- buttons & forms ---------- */
+button.primary {
+  background: var(--accent); color: #fff; border: 0; border-radius: 10px;
+  padding: 12px 18px; font: inherit; font-weight: 600; cursor: pointer;
+  width: 100%;
+}
+button.primary:disabled { opacity: .45; cursor: not-allowed; }
+button.ghost {
+  background: transparent; color: var(--dim); border: 1px solid var(--line);
+  border-radius: 10px; padding: 9px 14px; font: inherit; font-size: .86rem; cursor: pointer;
+}
+textarea, input[type=text] {
+  width: 100%; background: var(--panel2); color: var(--text);
+  border: 1px solid var(--line); border-radius: 10px;
+  padding: 11px 13px; font: inherit; font-size: .93rem; resize: vertical;
+}
+textarea:focus, input:focus { outline: none; border-color: var(--accent); }
+label.field { display: block; margin-bottom: 12px; }
+label.field > span { display: block; font-size: .8rem; color: var(--dim); margin-bottom: 6px; }
+.row { display: flex; gap: 8px; margin-top: 12px; }
+
+/* ---------- checkup bars ---------- */
+.dimrow { margin-bottom: 11px; }
+.dimrow .dimhead { display: flex; justify-content: space-between; font-size: .84rem; }
+.dimrow .dimhead em { font-style: normal; color: var(--dim); font-size: .78rem; }
+.dimbar { height: 7px; background: var(--line); border-radius: 999px; margin-top: 5px; overflow: hidden; }
+.dimbar i { display: block; height: 100%; border-radius: 999px; }
+.dimnote { font-size: .8rem; color: var(--dim); margin-top: 5px; }
+.dimnote b { color: var(--text); font-weight: 600; }
+
+/* ---------- lessons ---------- */
+.lesson-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  width: 100%; text-align: left; cursor: pointer;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+  padding: 13px 15px; margin-bottom: 9px; color: var(--text); font: inherit;
+}
+.lesson-item:hover { border-color: #48506a; }
+.lesson-item .t { font-size: .95rem; font-weight: 600; }
+.lesson-item .s { font-size: .76rem; color: var(--dim); margin-top: 3px; }
+.lesson-item > span:first-child { min-width: 0; flex: 1 1 auto; }
+.lesson-item .tag { flex: 0 0 auto; white-space: nowrap; align-self: center; }
+.reading { font-size: .96rem; line-height: 1.85; }
+.warnbox {
+  background: #2a2312; border: 1px solid #5d4f2c; border-radius: 10px;
+  padding: 11px 13px; font-size: .85rem; color: #e8d9b0; margin: 14px 0;
+}
+.warnbox b { color: var(--warn); }
+
+/* ---------- dialog ---------- */
+.sheet {
+  position: fixed; inset: 0; z-index: 50; display: none;
+  background: rgba(0,0,0,.6); backdrop-filter: blur(3px);
+}
+.sheet.open { display: block; }
+.sheet .inner {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  max-height: 88vh; overflow-y: auto;
+  background: var(--bg); border-top: 1px solid var(--line);
+  border-radius: 18px 18px 0 0; padding: 18px 16px 28px;
+  max-width: 720px; margin: 0 auto;
+}
+.sheet .close { position: sticky; top: 0; float: right; }
+/* 顶部那道小横条。Material 3 对底部浮层的规格是 32×4dp、居中、上下各 22dp 留白；
+   这里按手机宽度取了个相近的值。它的作用不是装饰：有这道条，人一眼就知道
+   "这块东西是从下面拉上来的，可以往下拖/点空白关掉"。 */
+.sheet .inner::before {
+  content: ''; display: block; width: 32px; height: 4px; border-radius: 999px;
+  background: var(--line); margin: 0 auto 14px;
+}
+
+/* ---------- tabs ---------- */
+.tabs {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+  display: flex; background: rgba(27,29,39,.96);
+  backdrop-filter: blur(12px); border-top: 1px solid var(--line);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.tabs button {
+  flex: 1; background: none; border: 0; color: var(--dim);
+  padding: 9px 2px 10px; font: inherit; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+}
+.tabs button b { font-size: .78rem; font-weight: 600; }
+.tabs button small { font-size: .62rem; opacity: .6; }
+.tabs button.active { color: var(--accent); }
+
+/* ---------- toast ---------- */
+.toast {
+  position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%) translateY(10px);
+  background: var(--panel2); border: 1px solid var(--line); color: var(--text);
+  padding: 9px 16px; border-radius: 999px; font-size: .84rem;
+  opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 60;
+  max-width: 88vw; text-align: center;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+.spin { display: inline-block; width: 13px; height: 13px; border: 2px solid var(--line);
+        border-top-color: var(--accent); border-radius: 50%; animation: sp .7s linear infinite;
+        vertical-align: -2px; margin-right: 7px; }
+@keyframes sp { to { transform: rotate(360deg); } }
+
+/* ---------- AI 陪练（场景对话） ---------- */
+.v-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.vh-temp { display: flex; align-items: center; gap: 8px; font-size: .76rem; color: var(--dim); margin-top: 6px; }
+/* ---------- 进度条 ----------
+   这两条是**基础**样式，不能只写在 .vh-temp 里面。
+   原来 .tbar 和 .tbar i 都只定义在 .vh-temp 下，于是今日卡片上的那条
+    `.tbar.today-bar` 拿到了 8px 的高度，却既没有底色、里面的 i 也不是 block——
+   实际渲染出来是完全透明的，进度条的填充宽度恒为 0。
+   也就是说「今天完成到哪了」这条最该一眼看到的信息，一直是不可见的。
+   用户反馈「每日任务界面不明显」，这是其中一个实打实的原因。
+   下面 .vh-temp 只覆盖尺寸，不再定义结构。 */
+.tbar { background: var(--line); border-radius: 999px; overflow: hidden; }
+.tbar i { display: block; height: 100%; border-radius: 999px;
+  background: linear-gradient(90deg, #6c8cff, #43c98b); transition: width .6s ease; }
+.vh-temp .tbar { width: 108px; height: 6px; }
+.vh-temp b { color: var(--text); }
+
+.her-card { border-left: 3px solid var(--line); }
+.her-card.t-冷淡, .her-card.t-不耐 { border-left-color: #6c8cff; }
+.her-card.t-平淡 { border-left-color: #4a5170; }
+.her-card.t-温和 { border-left-color: #e0b84c; }
+.her-card.t-热情 { border-left-color: var(--good); }
+.her-card.t-委屈 { border-left-color: #e08fb0; }
+.her-card.t-紧张 { border-left-color: #b98ce8; }
+.her-line { font-size: 1.1rem; line-height: 1.55; }
+.her-tone { font-size: .76rem; color: var(--dim); margin-top: 7px; }
+
+.mono {
+  margin-top: 11px; padding: 11px 13px; border-radius: 10px;
+  background: #241f2e; border: 1px solid #4d3d63; color: #d9cbe8; font-size: .88rem;
+}
+.mono-h { font-size: .72rem; color: #b98ce8; font-weight: 600; margin-bottom: 5px; }
+
+.rate-line { display: flex; align-items: center; gap: 9px; margin-top: 10px; font-size: .85rem; }
+.rate { font-weight: 700; padding: 2px 9px; border-radius: 7px; font-size: .8rem; white-space: nowrap; }
+.r-great { background: #16301f; color: var(--good); }
+.r-good  { background: #1d2c44; color: #7fb0ff; }
+.r-mid   { background: var(--panel2); color: var(--dim); }
+.r-bad   { background: #2f1a1a; color: var(--bad); }
+.sig { font-size: .8rem; color: var(--dim); margin-top: 8px; }
+
+.bub { max-width: 78%; padding: 9px 13px; border-radius: 14px; font-size: .92rem; margin: 8px 0 8px auto; }
+.bub.me { background: #2c3766; color: #dfe6ff; border-bottom-right-radius: 4px; margin-left: auto; }
+
+.v-talk { position: sticky; bottom: 8px; }
+.talk-row { display: flex; justify-content: center; }
+.ptt {
+  width: 100%; padding: 18px; border-radius: 14px; border: 1px solid #4a5da0;
+  background: #2c3766; color: #dfe6ff; font: inherit; font-size: 1rem; font-weight: 650;
+  cursor: pointer; user-select: none; -webkit-user-select: none; touch-action: none;
+}
+.ptt.on { background: #3a5bbf; border-color: #6c8cff; transform: scale(.985); }
+.ptt:disabled { opacity: .45; }
+.type-row { display: flex; gap: 8px; margin-top: 10px; }
+.type-row input { flex: 1; }
+/* 卡住的时候要有东西点。它就在输入框旁边——用户要的就是「在旁边」。 */
+.type-row .hint-btn { width: auto; padding: 10px 14px; flex: 0 0 auto; }
+.hint-panel:empty { display: none; }
+.hint-panel {
+  margin-top: 10px; padding: 12px; border-radius: 11px;
+  background: #171a26; border: 1px solid #2b3350;
+}
+.hint-head b { font-size: .95rem; }
+.hint-why { display: block; margin-top: 4px; color: #9fb6e8; font-size: .84rem; line-height: 1.6; }
+.hint-demo:empty { display: none; }
+.hint-demo .demo-line {
+  margin-top: 10px; padding: 10px 12px; border-left: 3px solid var(--good);
+  background: var(--panel2); border-radius: 8px; font-size: .95rem; line-height: 1.6;
+}
+
+.score-row { display: flex; gap: 10px; margin-top: 14px; }
+.score-row > div {
+  flex: 1; text-align: center; background: var(--panel2); border-radius: 10px; padding: 11px 6px;
+}
+.score-row b { display: block; font-size: 1.25rem; }
+.score-row span { font-size: .72rem; color: var(--dim); }
+
+.round { padding: 11px 0; border-bottom: 1px solid var(--line); }
+.round:last-child { border-bottom: 0; }
+.round-h { display: flex; align-items: center; gap: 9px; margin-bottom: 6px; }
+.v-err { background: #2f1a1a; border: 1px solid #6b3030; color: #f0b8b8;
+  border-radius: 10px; padding: 10px 13px; font-size: .85rem; margin: 8px 0; }
+
+.fog-fab {
+  position: fixed; right: 14px; bottom: calc(74px + env(safe-area-inset-bottom)); z-index: 40;
+  display: flex; align-items: center; gap: 7px;
+  background: #2b2334; color: #e6d8f5;
+  border: 1px solid #4d3d63; border-radius: 999px;
+  padding: 9px 15px; font: inherit; font-size: .82rem; font-weight: 600;
+  cursor: pointer; box-shadow: 0 6px 20px rgba(0,0,0,.45);
+}
+.fog-fab:active { transform: scale(.97); }
+.fog-dot { width: 7px; height: 7px; border-radius: 50%; background: #b98ce8; }
+
+/* 脑雾提示条 */
+.fog-hint {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  background: #241f2e; border: 1px solid #4d3d63; border-radius: 12px;
+  padding: 11px 13px; margin-top: 14px; font-size: .86rem; color: #d9cbe8;
+}
+.fog-hint button {
+  background: #4a3a61; color: #f0e8fa; border: 0; border-radius: 8px;
+  padding: 6px 12px; font: inherit; font-size: .82rem; cursor: pointer;
+}
+.fog-hint button.plain { background: transparent; color: var(--dim); }
+
+/* ---------- 恢复面板 ---------- */
+.mode {
+  display: block; width: 100%; text-align: left; cursor: pointer;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+  padding: 14px 15px; margin-bottom: 10px; color: var(--text); font: inherit;
+}
+.mode:hover { border-color: #6b5a86; }
+.mode .mk { font-size: .72rem; color: #b98ce8; font-weight: 600; }
+.mode .mn { font-size: 1rem; font-weight: 650; margin-top: 3px; }
+.mode .mw { font-size: .82rem; color: var(--dim); margin-top: 5px; }
+
+/* 呼吸节拍器 */
+.pacer-wrap { text-align: center; padding: 8px 0 4px; }
+.pacer {
+  width: 132px; height: 132px; margin: 6px auto 14px; border-radius: 50%;
+  background: radial-gradient(circle, #4a3a61 0%, #2b2334 70%);
+  border: 2px solid #6b5a86;
+  transition: transform 1s linear, border-color .5s;
+}
+.pacer.inhale  { transform: scale(1.42); border-color: #b98ce8; transition-duration: 4s; }
+.pacer.sip     { transform: scale(1.5);  border-color: #e0b84c; transition-duration: 1s; }
+.pacer.exhale  { transform: scale(1);    border-color: #43c98b; transition-duration: 8s; }
+.pacer-cue { font-size: 1.06rem; font-weight: 650; min-height: 1.7em; }
+.pacer-count { font-size: .8rem; color: var(--dim); margin-top: 5px; }
+
+/* 步骤清单 */
+.steps { list-style: none; padding: 0; margin: 6px 0 0; }
+.steps li {
+  display: flex; gap: 10px; align-items: flex-start;
+  background: var(--panel2); border: 1px solid var(--line); border-radius: 10px;
+  padding: 11px 13px; margin-bottom: 8px; font-size: .91rem; cursor: pointer;
+}
+.steps li .box {
+  flex: 0 0 18px; width: 18px; height: 18px; margin-top: 2px;
+  border: 1.5px solid var(--line); border-radius: 5px; font-size: .72rem;
+  display: flex; align-items: center; justify-content: center; color: transparent;
+}
+.steps li.done { border-color: #3f6d55; }
+.steps li.done .box { background: var(--good); border-color: var(--good); color: #0b1a12; }
+.steps li.done .txt { color: var(--dim); }
+
+.evbox {
+  background: #1c2430; border: 1px solid #33475e; border-radius: 10px;
+  padding: 11px 13px; font-size: .84rem; color: #c6d6e8; margin-top: 12px;
+}
+.evbox b { color: #8fb8e8; }
+
+/* 自评 2 选 1 */
+.moodrow { display: flex; gap: 8px; margin-top: 10px; }
+.moodrow button {
+  flex: 1; background: var(--panel2); color: var(--text); border: 1px solid var(--line);
+  border-radius: 10px; padding: 11px 6px; font: inherit; font-size: .86rem; cursor: pointer;
+}
+.moodrow button:hover { border-color: #48506a; }
+
+/* 脑雾记录 */
+.fogrow {
+  display: flex; justify-content: space-between; gap: 10px;
+  padding: 9px 0; border-bottom: 1px solid var(--line); font-size: .84rem;
+}
+.fogrow:last-child { border-bottom: 0; }
+.fogrow .l { color: var(--dim); }
+.honesty { font-size: .84rem; line-height: 1.75; color: #cbbcdd; }
+.honesty li { margin-bottom: 9px; }
+
+/* ============================== 逐选项诊断（frame-of-reference） */
+.subnav {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  margin-bottom: 9px; border-bottom: 1px solid var(--line); padding-bottom: 11px;
+}
+.subnav .chips { flex: 1; min-width: 0; margin-bottom: 0; }
+.subnav .chip-btn { font-size: .78rem; padding: 6px 11px; }
+/* 右侧那个常驻入口（现在只有 AI 那一路的「📋 历史」）。
+   它和别的胶囊长得一样，只是不换页、而是打开一个东西——所以给它一点强调色，
+   免得被当成第四个 tab。 */
+.subnav .subnav-act { flex: 0 0 auto; color: #cfe0ff; border-color: #36466e; background: #1d2740; }
+
+.diag-head { display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap; margin-bottom: 5px; }
+.diag-why { font-size: .88rem; line-height: 1.7; color: #cfc4e0; }
+.diag-fix {
+  margin-top: 9px; padding: 9px 11px; border-radius: 9px;
+  background: #1e2733; border: 1px solid #2e4155; font-size: .85rem; line-height: 1.65;
+}
+.diag-fix b { color: #9fd0ff; font-weight: 600; }
+.diag-mine { background: #241d26; border: 1px solid #4a2f3f; border-radius: 11px; padding: 12px; }
+/* 「先读局」用冷色，跟「你选的这条」的暖色（红调）区分开：
+   一个是「先看清局面」，一个是「这一步错了」，顺序上读局在前。 */
+.diag-read { background: #16202b; border: 1px solid #2c4155; border-radius: 11px; padding: 12px; }
+.diag-read .label { color: #8fb6dd; }
+
+/* ---------- 读局：先判局那一步 ----------
+   它是**挡在选项前面的**，不是一段说明。要看得出来这是个必须过的关口。 */
+.genre-step {
+  background: #16202b; border: 1px solid #2c4155; border-radius: 11px;
+  padding: 12px; margin: 10px 0 12px;
+}
+.genre-step .label { color: #8fb6dd; margin-bottom: 10px; }
+.genre-step.done { background: #141b23; border-color: #23323f; }
+.genre-grid { display: flex; flex-wrap: wrap; gap: 7px; }
+.genre-btn {
+  background: #1d2b38; color: var(--text); border: 1px solid #2c4155;
+  border-radius: 999px; padding: 7px 13px; font-size: .84rem; cursor: pointer;
+}
+.genre-btn:hover:not(:disabled) { border-color: #4a7ba8; }
+.genre-btn:disabled { opacity: .45; cursor: default; }
+.genre-btn.picked { opacity: 1; background: #24425c; border-color: #4a7ba8; color: #cfe6ff; }
+.genre-verdict { font-size: .88rem; margin: 2px 0 8px; }
+.genre-verdict.ok { color: #6fbf8f; }
+.genre-verdict.bad { color: #e8a05c; }
+
+/* 偏重出题的说明条。要显眼但不抢戏——它是「解释为什么」，不是任务本身。 */
+.focus-bar {
+  font-size: .8rem; color: var(--dim); line-height: 1.55;
+  background: #1a1b24; border: 1px solid var(--line); border-radius: 10px;
+  padding: 10px 12px; margin: 0 0 12px;
+}
+.focus-bar b { color: #c9b3f0; }
+
+/* 多行自由输入框：说场景用。 */
+.free-input {
+  width: 100%; margin-top: 12px; box-sizing: border-box;
+  background: var(--panel2); color: var(--text);
+  border: 1px solid var(--line); border-radius: 10px;
+  padding: 11px 12px; font-size: .92rem; line-height: 1.6;
+  font-family: inherit; resize: vertical;
+}
+.free-input:focus { outline: none; border-color: #4a7ba8; }
+.diag-more summary {
+  cursor: pointer; font-size: .82rem; color: var(--dim); font-weight: 600;
+  list-style: none; padding: 2px 0;
+}
+.diag-more summary::-webkit-details-marker { display: none; }
+.diag-more summary::before { content: '▸ '; }
+.diag-more[open] summary::before { content: '▾ '; }
+.diag-other { padding: 11px 0 0; margin-top: 11px; border-top: 1px solid var(--line); }
+.diag-other .diag-why { font-size: .84rem; color: var(--dim); }
+
+.tag-bad { background: #3a1f2a; color: #f0a0b4; border-color: #5c2f3f; }
+.tag-good { background: #1d3226; color: #8fd8a8; border-color: #2f5340; }
+.tag-warn { background: #3a2f1a; color: #e8c07a; border-color: #5a4a2a; }
+
+/* ============================== 行动预案 */
+.plan-box { border-top: 1px solid var(--line); padding-top: 13px; }
+.plan-seed {
+  background: var(--panel2); border: 1px solid var(--line); border-radius: 10px;
+  padding: 11px 12px; margin-bottom: 11px; font-size: .86rem; line-height: 1.7;
+}
+.plan-seed .label { margin-bottom: 6px; }
+.plan-seed b { color: #b98ce8; margin-right: 5px; font-weight: 600; }
+.plan-in { margin-bottom: 4px; }
+.plan-row { display: flex; align-items: center; gap: 9px; margin-bottom: 8px; }
+.plan-row > span {
+  flex: 0 0 34px; font-size: .82rem; color: #b98ce8; font-weight: 600;
+}
+.plan-row input { flex: 1; }
+.plan-msg { font-size: .84rem; line-height: 1.6; margin: 7px 0; min-height: 0; }
+.plan-msg.bad { color: #f0a0b4; }
+.plan-msg.ok { color: #8fd8a8; }
+.plan-card { display: block; }
+.plan-line { font-size: .92rem; line-height: 1.75; margin-top: 4px; }
+.plan-line b { color: #b98ce8; margin-right: 7px; font-weight: 600; }
+
+button.tiny, button.plain.tiny {
+  width: auto; padding: 5px 11px; font-size: .78rem; margin: 9px 7px 0 0;
+}
+button.plain {
+  background: transparent; border: 0; color: var(--accent);
+  font: inherit; font-size: .84rem; cursor: pointer; padding: 6px 0; width: auto;
+}
+
+/* ============================== 偏差画像 */
+.bias-card { border-left: 3px solid var(--line); }
+.bias-card.bias-top { border-left-color: #e8c07a; }
+.bias-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.bias-head b { font-size: 1.02rem; }
+.bias-sub { font-size: .78rem; color: var(--dim); margin-left: 8px; }
+.bias-n { font-size: .82rem; color: var(--dim); white-space: nowrap; }
+.bias-top .bias-n { color: #e8c07a; }
+
+/* ============================== 追问计数 */
+.ask-meter {
+  margin-top: 11px; padding-top: 11px; border-top: 1px solid var(--line);
+  font-size: .82rem; line-height: 1.7; color: var(--dim);
+}
+.ask-meter b { color: #b98ce8; font-weight: 600; }
+.ask-hit {
+  display: inline-block; margin-left: 5px; padding: 1px 8px; border-radius: 999px;
+  background: #1d3226; color: #8fd8a8; font-size: .76rem;
+}
+
+/* ============================== 阶段评估 */
+/* 7 个 tab 了，字号和 padding 都要收一点，否则 390px 宽会挤 */
+.tabs button { padding: 9px 1px 10px; }
+.tabs button b { font-size: .74rem; }
+.tabs button small { font-size: .58rem; }
+
+.stage-head h2 { margin-top: 6px; font-size: 1.3rem; }
+.stage-cap { font-size: .95rem; color: #cbb8e8; margin-top: 4px; font-weight: 600; }
+
+.gate-list { margin-top: 10px; }
+.gate-row { display: flex; gap: 10px; padding: 11px 0; border-bottom: 1px solid var(--line); }
+.gate-row:last-child { border-bottom: 0; }
+.gate-mark { color: var(--dim); font-weight: 700; width: 14px; flex: 0 0 14px; }
+.gate-row.ok .gate-mark { color: #8fd8a8; }
+.gate-body { flex: 1; min-width: 0; }
+.gate-label { font-size: .9rem; }
+.gate-row.ok .gate-label { color: #b6e6c6; }
+.gate-num { font-size: .78rem; color: var(--dim); margin-top: 5px; }
+
+.stage-list { margin-top: 10px; }
+.stage-row { display: flex; gap: 11px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.stage-row:last-child { border-bottom: 0; }
+.stage-row.done .stage-n { background: #1d3226; color: #8fd8a8; border-color: #2f5340; }
+.stage-row.here .stage-name { color: var(--accent); }
+.stage-n {
+  flex: 0 0 24px; height: 24px; border-radius: 50%; border: 1px solid var(--line);
+  display: flex; align-items: center; justify-content: center;
+  font-size: .76rem; color: var(--dim); font-weight: 600;
+}
+.stage-name { font-size: .92rem; font-weight: 600; }
+.stage-name em {
+  font-style: normal; font-size: .7rem; font-weight: 400; color: var(--accent);
+  margin-left: 7px; border: 1px solid var(--accent); border-radius: 999px; padding: 1px 7px;
+}
+.stage-sub { font-size: .78rem; color: var(--dim); margin-top: 2px; }
+
+.assign-card { border-left: 3px solid #b98ce8; }
+.assign-ask { font-size: .86rem; color: var(--dim); margin-top: 14px; }
+.assign-btns { flex-wrap: wrap; }
+.assign-btns .primary, .assign-btns .ghost { width: auto; flex: 1; min-width: 88px; }
+
+.ev-line {
+  font-size: .87rem; line-height: 1.7; padding: 6px 0 6px 13px;
+  border-left: 2px solid #3a4a6a; color: #cfc4e0;
+}
+.idn-list { margin-top: 14px; }
+.idn-item {
+  background: var(--panel2); border: 1px solid var(--line); border-radius: 10px;
+  padding: 11px 12px; margin-bottom: 9px; font-size: .89rem; line-height: 1.7;
+}
+.idn-item .hint { display: flex; justify-content: space-between; margin-top: 4px; }
+.idn-item button.plain.tiny { margin: 0; }
+
+/* ============================== 每日计划 / 闸门 */
+#todayChip.met { color: #8fd8a8; border-color: #2f5340; }
+
+.daily-card { border-left: 3px solid #4a5da0; }
+.daily-card.daily-met { border-left-color: #2f5340; }
+.daily-line { font-size: .89rem; color: var(--dim); margin-bottom: 4px; }
+.daily-line b { color: #b98ce8; }
+
+/* 闸门：全屏覆盖，不锁底下的界面——它是「摩擦」不是「禁止」。
+   研究里有效的是摩擦 + 一个明确的放弃选项，所以这里的重点是
+   要动手才能过，而不是把话说得多重。 */
+.gate {
+  position: fixed; inset: 0; z-index: 80;
+  background: rgba(12,12,18,.93); backdrop-filter: blur(6px);
+  overflow-y: auto; display: flex; align-items: flex-start; justify-content: center;
+  padding: 26px 14px calc(28px + env(safe-area-inset-bottom));
+}
+.gate-in { width: 100%; max-width: 560px; }
+.gate-top { margin-bottom: 14px; }
+.gate-top h2 { margin-top: 8px; font-size: 1.25rem; }
+
+.mono-line {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .82rem; color: #b6c8e6; word-break: break-all;
+}
+
+/* ============================== 今天页 + 5 tab 布局 */
+/* 5 个 tab 比 7 个宽松，字号可以放回来一点 */
+.tabs button { padding: 9px 3px 10px; }
+.tabs button b { font-size: .8rem; }
+.tabs button small { font-size: .6rem; }
+
+.today-card { border-left: 3px solid #4a5da0; }
+.today-card.today-met { border-left-color: #2f5340; }
+.today-h { margin-top: 9px; font-size: 1.22rem; }
+.today-bar { margin: 12px 0 12px; height: 8px; }
+
+/* ---------- 今日任务清单 ----------
+   每个必做项一行，左侧勾选标记、右侧计数。目标是「不用算就知道还差什么」：
+   做完的那行打勾并压暗，没做的保持正常亮度，扫一眼就能看到剩下的。 */
+.today-what {
+  margin: 6px 0 0; font-size: .95rem; color: var(--text);
+}
+.today-card.today-met .today-what { color: var(--dim); }
+.todo-list { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+.todo {
+  display: flex; align-items: baseline; gap: 10px;
+  padding: 9px 2px; border-bottom: 1px solid var(--line);
+}
+.todo:last-child { border-bottom: 0; }
+.todo-mark { font-size: .95rem; width: 14px; color: var(--dim); flex: 0 0 auto; }
+.todo-name { flex: 1; font-size: 1rem; }
+.todo-num { font-size: .86rem; color: var(--dim); font-variant-numeric: tabular-nums; }
+.todo-num i { font-style: normal; font-size: .74rem; }
+.todo-done .todo-mark { color: #6fbf8f; }
+.todo-done .todo-name, .todo-done .todo-num { color: var(--dim); }
+/* 加练单独一行、明显弱化：它是可选的，不能看起来跟必做项一样重 */
+.todo-extra {
+  margin-top: 10px; font-size: .82rem; color: var(--dim);
+}
+
+.gate-status { border-left: 3px solid var(--line); }
+.gate-status.armed { border-left-color: #e8c07a; }
+
+/* ---------- 「!」小弹窗 ----------
+   正文只留结论，过程性解释收进这个。点一下弹出来，点空白或 ✕ 关掉。
+   这是把「能不写就不写」和「需要时还在」同时满足的做法。 */
+.pop-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: none; border: 0; cursor: pointer; padding: 4px 0;
+  color: var(--dim); font-size: .8rem; font-family: inherit;
+}
+.pop-btn:hover { color: var(--text); }
+.pop-i {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 15px; height: 15px; border-radius: 50%;
+  border: 1px solid currentColor; font-size: .66rem; font-weight: 700;
+  line-height: 1; flex: 0 0 auto;
+}
+.pop-sheet {
+  position: fixed; inset: 0; background: rgba(0,0,0,.62);
+  display: flex; align-items: flex-end; z-index: 60;
+}
+.pop-in {
+  background: var(--panel); border-radius: 14px 14px 0 0; padding: 16px 16px 22px;
+  width: 100%; max-height: 72vh; overflow-y: auto;
+}
+.pop-h {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: .9rem; font-weight: 600; color: var(--text); margin-bottom: 8px;
+}
+.pop-x {
+  background: none; border: 0; color: var(--dim); font-size: 1rem;
+  cursor: pointer; padding: 2px 6px;
+}
+.pop-b { font-size: .88rem; line-height: 1.68; color: var(--text); }
+
+/* 场景对话的设置页：示例提示词。一条一行，点一下填进输入框。
+   用整块按钮而不是 chip：提示词本身是一句话，chip 会把它挤成两三行还截断，
+   而用户需要先看懂再决定改哪个字。 */
+.seed-list { display: flex; flex-direction: column; gap: 8px; }
+.seed {
+  text-align: left; font: inherit; font-size: .84rem; line-height: 1.5;
+  color: var(--text); background: #1b1f28; border: 1px solid #2c3340;
+  border-radius: 10px; padding: 10px 12px; cursor: pointer;
+}
+.seed:hover { border-color: #4a7ba8; background: #1f2530; }
+.seed:active { background: #232a36; }
+
+/* ==========================================================================
+   免提对话 / 复盘（2.15 新增）
+
+   免提这套状态的可见性不是装饰。一个一直开着的麦克风如果看不出在不在听，
+   用户唯一的办法是关掉整个 App——那比没有这个功能更糟。
+   所以每个状态都有自己的颜色和文字，而且**按钮的文案就是点下去的后果**：
+   正在听时是「说完了，发出」，她出声时是「打断她」。
+   ========================================================================== */
+
+.phase-line {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; margin-bottom: 12px;
+}
+.phase-pill {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: .8rem; color: var(--dim);
+}
+.phase-dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: #4a4f5e; flex: 0 0 auto;
+  transition: background .15s, box-shadow .15s;
+}
+/* idle 不亮，listening 亮绿并在脉动，thinking 黄，speaking 蓝 */
+.phase-dot.listening { background: var(--good); box-shadow: 0 0 0 4px rgba(67,201,139,.16); animation: pd 1.3s infinite; }
+.phase-dot.thinking { background: var(--warn); box-shadow: 0 0 0 4px rgba(224,184,76,.14); }
+.phase-dot.speaking { background: var(--accent); box-shadow: 0 0 0 4px rgba(108,140,255,.16); }
+@keyframes pd { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+
+.hf-toggle {
+  font: inherit; font-size: .76rem; color: var(--dim);
+  background: var(--panel2); border: 1px solid var(--line);
+  border-radius: 999px; padding: 5px 11px; cursor: pointer;
+}
+.hf-toggle:active { background: #2b2f3a; }
+
+/* 两种模式都渲染出来，用 class 切显示——按模式重渲染会把聊天记录清掉 */
+.hf-only, .ptt-only { display: none; }
+.v-talk.hf-on .hf-only { display: block; }
+.v-talk:not(.hf-on) .ptt-only { display: block; }
+
+.mic-big {
+  width: 100%; font: inherit; font-size: 1.02rem; font-weight: 650;
+  color: var(--text); background: var(--panel2);
+  border: 1px solid var(--line); border-radius: 999px;
+  padding: 20px 16px; cursor: pointer; margin-bottom: 12px;
+  transition: background .15s, border-color .15s;
+}
+.mic-big.idle { background: #2a3350; border-color: #3d4a72; }
+.mic-big.listening {
+  background: #1f3a2c; border-color: var(--good);
+  animation: pdc 1.6s infinite;
+}
+@keyframes pdc { 0%,100% { box-shadow: 0 0 0 0 rgba(67,201,139,.0); } 50% { box-shadow: 0 0 0 7px rgba(67,201,139,.13); } }
+.mic-big.speaking { background: #2c2438; border-color: #7a5aa8; }
+.mic-big.thinking { background: var(--panel2); color: var(--dim); }
+.mic-big:disabled { opacity: .6; cursor: default; }
+
+.seed.preset {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+}
+.seed.preset b { font-weight: 600; font-size: .86rem; }
+.seed-meta { font-size: .72rem; color: var(--dim); flex: 0 0 auto; }
+
+/* 场景库按关系分组的小标题。它不是卡片、也不可点，所以刻意做得比卡片弱：
+   没有边框和底色，只在视觉上"切开"一组，别让人以为点得动。 */
+.seed-group {
+  font-size: .72rem; font-weight: 600; letter-spacing: .06em; color: var(--dim);
+  margin: 8px 0 -2px; padding-left: 2px;
+}
+.seed-group:first-child { margin-top: 0; }
+
+/* ---------- 复盘 ---------- */
+.deb-verdict { font-size: .92rem; line-height: 1.75; color: var(--text); margin: 10px 0 12px; }
+.deb-pattern {
+  background: #1f2433; border-left: 3px solid var(--accent);
+  border-radius: 8px; padding: 10px 12px; font-size: .85rem; line-height: 1.65;
+  color: #cdd5e8; margin-bottom: 14px;
+}
+.deb-block { margin-bottom: 14px; }
+.deb-h {
+  font-size: .78rem; color: var(--dim); font-weight: 600;
+  letter-spacing: .04em; margin-bottom: 8px;
+}
+.deb-list { margin: 0; padding-left: 18px; }
+.deb-list li { font-size: .85rem; line-height: 1.7; margin-bottom: 4px; }
+.deb-fix {
+  background: #1b1f2a; border: 1px solid var(--line);
+  border-radius: 11px; padding: 11px 12px; margin-bottom: 9px;
+}
+.deb-act { font-size: .87rem; font-weight: 600; color: #ffd08a; margin-bottom: 6px; }
+.deb-say {
+  font-size: .86rem; line-height: 1.6; color: #9fd0ff;
+  background: #16202c; border-radius: 8px; padding: 8px 10px;
+}
+.deb-one {
+  font-size: .88rem; line-height: 1.65;
+  background: #22301f; border: 1px solid #3c5030; border-left: 3px solid var(--good);
+  border-radius: 9px; padding: 11px 12px; margin-top: 4px;
+}
+
+/* 结束页的三个按钮。挤在一行时「随机换一个」「自己挑一个」会被压成竖排字——
+   flex 不会让按钮换行，只会把它们压窄。拆成两行：主动作整行，两个选项平分。 */
+.row-1 > button { flex: 1 1 100%; }
+.row-2 > button { flex: 1 1 0; min-width: 0; }
+.row-2 { margin-top: 8px; }
+
+/* ---------- 对话历史 ---------- */
+/* 入口是一个小图标按钮（用户要的就是「有一个小图标可以点进去」），
+   所以它不能跟 .row 里那些整行按钮长一样，得窄、靠右。 */
+.his-entry { display: flex; justify-content: flex-end; margin: 10px 0 0; }
+.his-btn { width: auto; flex: 0 0 auto; padding: 7px 13px; font-size: .82rem; }
+.his-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.his-head h2 { flex: 1; min-width: 0; }
+.his-head > button { width: auto; flex: 0 0 auto; padding: 7px 13px; font-size: .82rem; }
+.his-list { display: flex; flex-direction: column; gap: 9px; margin-top: 12px; }
+.his-item { display: grid; gap: 6px; }
+.his-row { display: flex; align-items: stretch; gap: 8px; }
+.his-main {
+  flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px;
+  text-align: left; font: inherit; color: var(--text);
+  background: #1b1f28; border: 1px solid #2c3340; border-radius: 11px;
+  padding: 11px 12px; cursor: pointer;
+}
+.his-main:active { background: #232a36; }
+.his-main b { font-size: .9rem; font-weight: 600; }
+.his-meta { font-size: .75rem; color: var(--dim); line-height: 1.6; }
+/* 状态标签。分三态：没聊完（可以接着聊，用强调色）/ 结束了有分析 / 结束了没分析。
+   这三件事原来挤在元信息那一行里、还用了 <i> 假装是高亮，读起来分不出轻重。 */
+.his-tag {
+  align-self: flex-start; font-size: .72rem; color: var(--dim);
+  background: var(--panel2); border: 1px solid var(--line);
+  border-radius: 999px; padding: 2px 8px;
+}
+.his-tag.his-live { color: #ffd08a; border-color: #57482a; background: #2a2418; }
+/* 「接着聊」单独占一行：它和「删除」挤在同一行时，标题会被压成两三行，
+   而且这两个按钮的意义差得很远（一个是继续、一个是销毁），不该并排。 */
+.his-go {
+  width: 100%; text-align: left; font: inherit; font-size: .84rem; font-weight: 600;
+  color: #cfe0ff; background: #1d2740; border: 1px solid #33456e;
+  border-left: 3px solid var(--accent); border-radius: 11px;
+  padding: 10px 12px; cursor: pointer;
+}
+.his-go:active { background: #232f4d; }
+.his-del {
+  width: auto; flex: 0 0 auto; font: inherit; font-size: .78rem;
+  color: var(--bad); background: #241b1f; border: 1px solid #4a2b31;
+  border-radius: 11px; padding: 0 12px; cursor: pointer;
+}
+.his-del:active { background: #2f2228; }
+/* 删除确认就地把那一行换掉。比 window.confirm 好用的地方：它就在你点的位置上，
+   而且不会挡住别的操作；也免得删错——记录只有本地和备份各一份。 */
+.his-confirm {
+  flex: 1; font-size: .84rem; color: var(--text);
+  background: #221a1c; border: 1px dashed var(--bad); border-radius: 11px;
+  padding: 11px 12px;
+}
+.his-confirm > span { display: block; margin-bottom: 8px; }
+.his-confirm > button { width: auto; }
+
+/* 现造的三个场景（ai 页「让 AI 现造 3 个」）。每张卡都把"对方是谁/练什么/最容易错"
+   摆出来——用户要的是**挑**，不是抽，所以信息得在点之前就看得到。 */
+.batch-wrap { margin-top: 14px; display: grid; gap: 10px; }
+.batch-head { font-size: .78rem; color: var(--dim); font-weight: 600; letter-spacing: .03em; }
+.batch-card {
+  background: #1b1f28; border: 1px solid #2c3340; border-left: 3px solid var(--accent);
+  border-radius: 11px; padding: 11px 12px;
+}
+.batch-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.batch-top b { font-size: .9rem; font-weight: 600; }
+.batch-card .hint { font-size: .78rem; }
+.batch-go { width: auto; margin-top: 10px; padding: 8px 14px; font-size: .84rem; }
+
+/* 正文里能点的一小段字（不是整行按钮、也不是 <a href="javascript:...">）。
+   项目里别处都是 button + 类名，这里跟着来，省得为了一个链接引入
+   javascript: 这种写法——它在 WebView 里能跑，但它同时是很多安全工具
+   眼里的"可疑链接"，而这一处的收益只是少写几行 CSS。 */
+.link-btn {
+  width: auto; display: inline; padding: 0; margin: 0; border: 0; background: none;
+  color: var(--accent); font: inherit; text-decoration: underline; cursor: pointer;
+}
+
+/* ---------- 挑要拦的应用 ---------- */
+.pkg-list { max-height: 56vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.pkg-item {
+  display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto;
+  gap: 2px 10px; width: 100%; text-align: left; font: inherit;
+  background: var(--panel2); border: 1px solid var(--line); border-radius: 11px;
+  padding: 10px 12px; margin-bottom: 7px; cursor: pointer;
+}
+.pkg-item.on { background: #1e2e26; border-color: var(--good); }
+.pkg-label { font-size: .9rem; font-weight: 600; color: var(--text); }
+.pkg-mark { font-size: .72rem; color: var(--good); font-weight: 600; justify-self: end; }
+.pkg-pkg {
+  grid-column: 1 / -1; font-size: .68rem; color: var(--dim);
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  overflow-wrap: anywhere;
+}
+#pkgSearch {
+  width: 100%; font: inherit; font-size: .88rem; color: var(--text);
+  background: var(--panel2); border: 1px solid var(--line);
+  border-radius: 10px; padding: 10px 12px;
+}
+#pkgSearch:focus { outline: none; border-color: #4a7ba8; }
+
+/* ---------- 今天就练这个 ---------- */
+.daily-scene { border: 1px solid #3a4a6a; background: linear-gradient(180deg, #1d2331, #1b1d27); }
+/* 「上次没聊完」那张卡：它是这一页最该先被看见的东西（用户回来就是来找它的），
+   所以给它一个暖色的强调边，跟下面那张蓝色的「今天就练这个」区分开——
+   两张都用蓝色的话，扫一眼分不出哪个才是"继续"、哪个是"新开一局"。 */
+.resume-card { border: 1px solid #6a5a2e; background: linear-gradient(180deg, #24211a, #1b1b20); }
+.resume-card .label { color: #d8c68a; }
+.daily-meta { display: flex; flex-wrap: wrap; gap: 6px; }
+.daily-meta .tag {
+  font-size: .72rem; color: var(--dim);
+  background: var(--panel2); border: 1px solid var(--line);
+  border-radius: 999px; padding: 3px 9px;
+}
+.daily-meta .tag-good { color: #8fd8a8; border-color: #2f5340; background: #1d3226; }
+
+/* ---------- 音色（语音包） ---------- */
+.voice-list { max-height: 44vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.voice-item {
+  display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto;
+  gap: 2px 10px; width: 100%; text-align: left; font: inherit;
+  background: var(--panel2); border: 1px solid var(--line); border-radius: 11px;
+  padding: 10px 12px; margin-bottom: 7px; cursor: pointer;
+}
+.voice-item.on { background: #1e2e26; border-color: var(--good); }
+.voice-name { font-size: .88rem; font-weight: 600; color: var(--text); }
+.voice-mark { font-size: .72rem; color: var(--good); font-weight: 600; justify-self: end; }
+.voice-meta {
+  grid-column: 1 / -1; font-size: .68rem; color: var(--dim);
+  font-family: ui-monospace, Menlo, Consolas, monospace; overflow-wrap: anywhere;
+}
+
+/* ---------- 信号场（小游戏） ----------
+   两个按钮要足够大、足够分清：这是一个「半秒内做判断」的练习，
+   按钮小或者颜色接近，练的就变成了瞄准而不是分辨。 */
+.sg-dots { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 12px; }
+.sg-dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--panel2); border: 1px solid var(--line);
+}
+.sg-dot.sg-ok { background: var(--good); border-color: var(--good); }
+.sg-dot.sg-no { background: var(--bad); border-color: var(--bad); }
+.sg-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.sg-btn {
+  display: flex; flex-direction: column; gap: 4px; align-items: flex-start;
+  font: inherit; text-align: left; cursor: pointer;
+  background: var(--panel2); border: 1.5px solid var(--line);
+  border-radius: var(--radius); padding: 14px 12px; color: var(--text);
+}
+.sg-btn b { font-size: .95rem; }
+.sg-btn span { font-size: .7rem; color: var(--dim); line-height: 1.35; }
+.sg-btn.yes { border-color: #3a4b7d; }
+.sg-btn.no { border-color: #4a4a52; }
+.sg-btn:active { background: #2b2f3b; }
+.sg-fb { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 12px; }
+.sg-verdict { font-weight: 700; margin-bottom: 6px; }
+.sg-fb.sg-right .sg-verdict { color: var(--good); }
+.sg-fb.sg-wrong .sg-verdict { color: var(--bad); }
+.sg-kind { font-size: .8rem; color: var(--dim); margin-bottom: 12px; }
+.sg-mix { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; font-size: .8rem; color: var(--dim); }
+.sg-mix b { color: var(--text); }
+.sg-review { display: flex; flex-direction: column; gap: 6px; }
+.sg-rev {
+  display: flex; gap: 8px; align-items: baseline; text-align: left; font: inherit;
+  background: var(--panel2); border: 1px solid var(--line); border-left-width: 3px;
+  border-radius: 9px; padding: 8px 10px; color: var(--dim); cursor: pointer;
+}
+.sg-rev.ok { border-left-color: var(--good); }
+.sg-rev.no { border-left-color: var(--bad); }
+.sg-rev b { color: var(--text); }
+.sg-rev span { font-size: .78rem; overflow-wrap: anywhere; }
+.sg-rev-body { padding: 4px 2px 8px 2px; }
+
+/* ---------- 背景声 ----------
+   开关放在「卡住了」旁边：那个位置是常驻的，任何时候都点得到，
+   而且两个都是"当下想用"的东西，摆一起顺理成章。 */
+.audio-fab {
+  position: fixed; right: 14px; bottom: calc(122px + env(safe-area-inset-bottom)); z-index: 40;
+  display: flex; align-items: center; gap: 6px;
+  background: #1e2b34; color: #cfe6f5;
+  border: 1px solid #35505f; border-radius: 999px;
+  padding: 9px 14px; font: inherit; font-size: .82rem; font-weight: 600;
+  cursor: pointer; box-shadow: 0 6px 20px rgba(0,0,0,.45);
+}
+.audio-fab:active { transform: scale(.97); }
+.audio-fab.on { background: #1d3226; border-color: #2f5340; color: #b6edcd; }
+.audio-note { font-size: .9rem; }
+.audio-fab.on .audio-note { animation: audioPulse 2.6s ease-in-out infinite; }
+@keyframes audioPulse { 0%,100% { opacity: .55; } 50% { opacity: 1; } }
+
+/* 音轨列表 */
+.track-item {
+  display: grid; grid-template-columns: 1fr auto; gap: 3px 10px; width: 100%;
+  text-align: left; font: inherit; cursor: pointer;
+  background: var(--panel2); border: 1px solid var(--line); border-radius: 11px;
+  padding: 10px 12px; margin-bottom: 7px;
+}
+.track-item.on { background: #1e2e26; border-color: var(--good); }
+.track-name { font-size: .88rem; font-weight: 600; color: var(--text); }
+.track-mark { font-size: .72rem; color: var(--good); font-weight: 600; justify-self: end; }
+.track-desc { grid-column: 1 / -1; font-size: .72rem; color: var(--dim); line-height: 1.5; }
+.track-flag { grid-column: 1 / -1; font-size: .7rem; color: var(--warn); }
+
+/* 设置的分区导航 */
+/* 设置的分区导航。原来是两列六个大格子：它占掉浮层顶部三分之一，
+   而每个分区里往往只有两三行内容——每次都得先滚过一排按钮才看得到正文。
+   现在是一行可以横向滑的胶囊（和 practice/ai/growth 的三条二级导航同一个样式），
+   扫一眼就知道有哪几块，正文立刻就在下面了。 */
+.set-nav {
+  display: flex; flex-wrap: nowrap; gap: 6px; margin-bottom: 14px;
+  overflow-x: auto; -webkit-overflow-scrolling: touch;
+  padding-bottom: 2px; scrollbar-width: none;
+}
+.set-nav::-webkit-scrollbar { display: none; }
+/* 右边淡出：这一行在 420px 上放不下六个分区，最后一个会被切一半。
+   切一半本身是"可以滑"的提示（iOS 也这么做），但边上加一层渐隐，看着是故意的，
+   而不是"字被裁掉了"。 */
+.set-nav { -webkit-mask-image: linear-gradient(90deg, #000 88%, transparent 100%);
+           mask-image: linear-gradient(90deg, #000 88%, transparent 100%); }
+.set-nav button {
+  flex: 0 0 auto; font: inherit; font-size: .84rem; cursor: pointer; text-align: center;
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 999px; padding: 7px 14px; color: var(--dim);
+}
+.set-nav button.on { background: #2c3766; border-color: #4a5da0; color: #dfe6ff; font-weight: 600; }
+.set-h { font-size: .95rem; font-weight: 700; margin: 4px 0 12px; color: var(--text); }
+.set-note { font-size: .74rem; color: var(--dim); line-height: 1.6; margin: 0 0 12px; }
+
+/* 设置里的可折叠说明。默认折起来，减少滚动；
+   但里面的文字在 DOM 里仍然算数（安全相关的说明不能靠折叠变成不存在）。 */
+.set-details { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 12px; }
+.set-details > summary {
+  cursor: pointer; font-size: .84rem; font-weight: 600; color: var(--dim);
+  padding: 6px 0; list-style: none;
+}
+.set-details > summary::-webkit-details-marker { display: none; }
+.set-details > summary::before { content: '▸ '; color: var(--accent); }
+.set-details[open] > summary::before { content: '▾ '; }
+.set-details > summary:active { color: var(--text); }

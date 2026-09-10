@@ -1,0 +1,278 @@
+{
+ "byStep": {
+  "建场景": {
+   "n": 1,
+   "in": 422,
+   "out": 150,
+   "hit": 256,
+   "miss": 166,
+   "ms": 2056,
+   "off": 0.0007711199999999999,
+   "peak": 0.0015422399999999998
+  },
+  "对话一轮": {
+   "n": 8,
+   "in": 4910,
+   "out": 274,
+   "hit": 3328,
+   "miss": 1582,
+   "ms": 8406,
+   "off": 0.0027445599999999996,
+   "peak": 0.005489119999999999
+  },
+  "对话后复盘": {
+   "n": 1,
+   "in": 614,
+   "out": 360,
+   "hit": 128,
+   "miss": 486,
+   "ms": 2966,
+   "off": 0.0019285600000000002,
+   "peak": 0.0038571200000000003
+  },
+  "表达体检": {
+   "n": 1,
+   "in": 506,
+   "out": 369,
+   "hit": 0,
+   "miss": 506,
+   "ms": 2924,
+   "off": 0.0019820000000000003,
+   "peak": 0.0039640000000000005
+  },
+  "复盘·出题": {
+   "n": 1,
+   "in": 260,
+   "out": 396,
+   "hit": 0,
+   "miss": 260,
+   "ms": 3203,
+   "off": 0.001844,
+   "peak": 0.003688
+  },
+  "复盘·揭晓": {
+   "n": 1,
+   "in": 364,
+   "out": 466,
+   "hit": 0,
+   "miss": 364,
+   "ms": 3504,
+   "off": 0.002228,
+   "peak": 0.004456
+  }
+ },
+ "tot": {
+  "n": 13,
+  "in": 7076,
+  "out": 2015,
+  "hit": 3712,
+  "miss": 3364,
+  "ms": 23059,
+  "off": 0.01149824,
+  "peak": 0.02299648
+ },
+ "scene": {
+  "off": 0.0054442399999999995,
+  "peak": 0.010888479999999999,
+  "n": 10,
+  "in": 5946,
+  "out": 784
+ },
+ "calls": [
+  {
+   "step": "建场景",
+   "ms": 2056,
+   "status": 200,
+   "usage": {
+    "prompt_tokens": 422,
+    "completion_tokens": 150,
+    "total_tokens": 572,
+    "prompt_tokens_details": {
+     "cached_tokens": 256
+    },
+    "prompt_cache_hit_tokens": 256,
+    "prompt_cache_miss_tokens": 166
+   }
+  },
+  {
+   "step": "对话一轮",
+   "ms": 1717,
+   "status": 200,
+   "usage": {
+    "prompt_tokens": 563,
+    "completion_tokens": 100,
+    "total_tokens": 663,
+    "prompt_tokens_details": {
+     "cached_tokens": 384
+    },
+    "prompt_cache_hit_tokens": 384,
+    "prompt_cache_miss_tokens": 179
+   }
+  },
+  {
+   "step": "对话一轮",
+   "ms": 1205,
+   "status": 200,
+   "usage": {
+    "prompt_tokens": 582,
+    "completion_tokens": 13,
+    "total_tokens": 595,
+    "prompt_tokens_details": {
+     "cached_tokens": 384
+    },
+    "prompt_cache_hit_tokens": 384,
+    "prompt_cache_miss_tokens": 198
+   }
+  },
+  {
+   "step": "对话一轮",
+   "ms": 962,
+   "status": 200,
+   "usage": {
+    "prompt_tokens": 597,
+    "completion_tokens": 13,
+    "total_tokens": 610,
+    "prompt_tokens_details": {
+     "cached_tokens": 384
+    },
+    "prompt_cache_hit_tokens": 384,
+    "prompt_cache_miss_tokens": 213
+   }
+  },
+  {
+   "step": "对话一轮",
+   "ms": 736,
+   "status": 200,
+   "usage": {
+    "prompt_tokens": 607,
+    "completion_tokens": 11,
+    "total_tokens": 618,
+    "prompt_tokens_details": {
+     "cached_tokens": 384
+    },
+    "prompt_cache_hit_tokens": 384,
+    "prompt_cache_miss_tokens": 223
+   }
+  },
+  {
+   "step": "对话一轮",
+   "ms": 780,
+   "status": 200,
+   "usage": {
+    "prompt_tokens": 613,
+    "completion_tokens": 13,
+    "total_tokens": 626,
+    "prompt_tokens_details": {
+     "cached_tokens": 384
+    },
+    "prompt_cache_hit_tokens": 384,
+    "prompt_cache_miss_tokens": 229
+   }
+  },
+  {
+   "step": "对话一轮",
+   "ms": 1437,
+   "status": 200,
+   "usage": {
+    "prompt_tokens": 624,
+    "completion_tokens": 102,
+    "total_tokens": 726,
+    "prompt_tokens_details": {
+     "cached_tokens": 384
+    },
+    "prompt_cache_hit_tokens": 384,
+    "prompt_cache_miss_tokens": 240
+   }
+  },
+  {
+   "step": "对话一轮",
+   "ms": 684,
+   "status": 200,
+   "usage": {
+    "prompt_tokens": 654,
+    "completion_tokens": 15,
+    "total_tokens": 669,
+    "prompt_tokens_details": {
+     "cached_tokens": 512
+    },
+    "prompt_cache_hit_tokens": 512,
+    "prompt_cache_miss_tokens": 142
+   }
+  },
+  {
+   "step": "对话一轮",
+   "ms": 885,
+   "status": 200,
+   "usage": {
+    "prompt_tokens": 670,
+    "completion_tokens": 7,
+    "total_tokens": 677,
+    "prompt_tokens_details": {
+     "cached_tokens": 512
+    },
+    "prompt_cache_hit_tokens": 512,
+    "prompt_cache_miss_tokens": 158
+   }
+  },
+  {
+   "step": "对话后复盘",
+   "ms": 2966,
+   "status": 200,
+   "usage": {
+    "prompt_tokens": 614,
+    "completion_tokens": 360,
+    "total_tokens": 974,
+    "prompt_tokens_details": {
+     "cached_tokens": 128
+    },
+    "prompt_cache_hit_tokens": 128,
+    "prompt_cache_miss_tokens": 486
+   }
+  },
+  {
+   "step": "表达体检",
+   "ms": 2924,
+   "status": 200,
+   "usage": {
+    "prompt_tokens": 506,
+    "completion_tokens": 369,
+    "total_tokens": 875,
+    "prompt_tokens_details": {
+     "cached_tokens": 0
+    },
+    "prompt_cache_hit_tokens": 0,
+    "prompt_cache_miss_tokens": 506
+   }
+  },
+  {
+   "step": "复盘·出题",
+   "ms": 3203,
+   "status": 200,
+   "usage": {
+    "prompt_tokens": 260,
+    "completion_tokens": 396,
+    "total_tokens": 656,
+    "prompt_tokens_details": {
+     "cached_tokens": 0
+    },
+    "prompt_cache_hit_tokens": 0,
+    "prompt_cache_miss_tokens": 260
+   }
+  },
+  {
+   "step": "复盘·揭晓",
+   "ms": 3504,
+   "status": 200,
+   "usage": {
+    "prompt_tokens": 364,
+    "completion_tokens": 466,
+    "total_tokens": 830,
+    "prompt_tokens_details": {
+     "cached_tokens": 0
+    },
+    "prompt_cache_hit_tokens": 0,
+    "prompt_cache_miss_tokens": 364
+   }
+  }
+ ]
+}

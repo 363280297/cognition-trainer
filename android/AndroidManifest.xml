@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  认知训练 · Android 客户端
+
+  权限说明（只有在线功能需要，离线模块一个都不用）：
+    · INTERNET      —— 语音陪练/表达体检/真实复盘 需要调用大模型 API；
+                       你不在 App 里填密钥、或者没网时，这四个离线模块照常可用
+                       （**没有 RECORD_AUDIO**：2.31 起 App 不录音了，你打字，她出声）
+    · POST_NOTIFICATIONS —— 每日提醒（Android 13+ 才需要运行时授权）
+
+  下面三项是为了「达标之前先别打开游戏」，全部不需要 root：
+    · 无障碍服务（GateService）—— 检测哪个应用到了前台。这是 Android 上的
+      标准做法，而且权限范围比 root **更小**：canRetrieveWindowContent=false，
+      也就是它读不到任何界面内容，只拿到一个包名。
+    · SCHEDULE 提醒走 AlarmManager.setAndAllowWhileIdle —— 不需要
+      「闹钟和提醒」特殊权限，代价是最多晚几分钟，每天一次无所谓。
+    · RECEIVE_BOOT_COMPLETED —— 重启后把提醒重排上，否则重启一次提醒就没了。
+    · SYSTEM_ALERT_WINDOW —— 闸门那个全屏浮层。没有它就只能把主界面拉到前台，
+      观感上就是「游戏已经开了，然后你被拽走」。
+
+  App 里不包含任何 API 密钥：密钥由你自己粘贴一次，只存在手机本地。
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.local.cognitiontrainer"
+    android:versionCode="35"
+    android:versionName="2.33">
+
+    <!--
+      闸门要「从已安装应用里挑」，就得能列出有启动图标的应用。
+      Android 11+ 默认看不到别的应用，而这里**刻意不用 QUERY_ALL_PACKAGES**
+      （那是个广权限，商店审核要单独说明，也超出这个功能的需要）——
+      只声明我们真正要查的那一个 intent，包可见性就够用了。
+      这个 App 的底线是不做流氓软件：能少要一个权限就少要一个。
+    -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+        <!-- 同上，给语音合成留一条：TTS 引擎也是靠服务查询找到的 -->
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- 悬浮窗：达标之前把目标应用整屏盖住。不需要 root。 -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
+    <!-- 备份用。写的是「下载/认知训练/认知训练-进度备份.json」这一个纯文本文件。
+         maxSdkVersion="28" 是有意的：Android 10 起走 MediaStore，**不需要任何权限**，
+         所以这个权限在新系统上根本不会被请求、也不会出现在权限列表里。
+         只有 Android 9 及以下才需要它，因为那些版本只能直写公共目录。 -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+
+    <!--
+      extractNativeLibs="true"：本地识别要用的 libvosk.so / libjnidispatch.so 直接打在
+      APK 的 lib/<abi>/ 里，这一条让系统在**安装时**把它们解到应用目录，JNA 才能按名字
+      找到 libvosk.so。不开（false）时库必须不压缩且按页对齐、只能从 APK 内部加载，
+      对 JNA 这种「按路径 dlopen」的方式不适用。卸载时这些库跟着 APK 一起消失。
+    -->
+    <application
+        android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:theme="@style/AppTheme"
+        android:hardwareAccelerated="true"
+        android:allowBackup="true"
+        android:usesCleartextTraffic="false"
+        android:extractNativeLibs="true"
+        android:supportsRtl="false">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:screenOrientation="portrait"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode|fontScale">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- 闸门：达标之前拦住目标应用。不需要 root。 -->
+        <service
+            android:name=".GateService"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/gate_service" />
+        </service>
+
+        <!-- 每日提醒 + 开机重排 -->
+        <receiver
+            android:name=".ReminderReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.local.cognitiontrainer.DAILY" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

@@ -1,0 +1,12 @@
+{
+  "name": "认知训练 · 读懂言外之意",
+  "short_name": "认知训练",
+  "description": "读懂言外之意、练表达分寸。离线题库 + AI 陪练 + 脑雾恢复。",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#12131a",
+  "theme_color": "#12131a",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

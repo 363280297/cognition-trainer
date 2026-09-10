@@ -1,0 +1,27 @@
+# 本机状态 / 密钥 —— 绝不能进仓库
+.env
+*.env
+progress.json
+
+# 构建产物（build_offline.py / build_apk.py 生成，随时能重建）
+认知训练-离线版.html
+认知训练-离线版.src.txt
+__pycache__/
+*.pyc
+server.log
+
+# 截图（tools/shot_*.js 的产物，一张一两兆）
+output/
+
+# 手搓 Android 构建的中间目录（build_apk.py 自己会重建）
+android/build/
+
+# 环境目录
+.venv/
+.playwright-cli/
+
+# 签名后的 idsig（每次构建都变）
+*.idsig
+
+# 注：android/认知训练.apk 是**有意**留在仓库里的交付物（deliver.py 会同步它，
+# README 也把它当作"装到手机上就独立运行"的那一份），所以不忽略。

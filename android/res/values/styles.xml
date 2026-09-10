@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 深色主题，和 App 内部配色一致，启动时不会有白屏闪一下 -->
+    <style name="AppTheme" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#12131A</item>
+        <item name="android:colorBackground">#12131A</item>
+        <item name="android:statusBarColor">#12131A</item>
+        <item name="android:navigationBarColor">#1B1D27</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>

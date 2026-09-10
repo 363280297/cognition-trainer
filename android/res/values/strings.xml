@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">认知训练</string>
+    <!-- 无障碍服务在系统设置里显示的说明。把话写清楚：它读不到界面内容。 -->
+    <string name="gate_service_desc">检测你打开了哪个应用，在没完成每日计划时提醒你先做完。</string>
+    <string name="gate_service_summary">只读取应用包名，不读取屏幕内容，不联网。</string>
+</resources>

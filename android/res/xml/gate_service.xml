@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  闸门服务的配置。
+
+  刻意把 canRetrieveWindowContent 设为 false：这个服务只需要知道
+  「哪个应用到了前台」，不需要读界面内容。关掉它，系统就会拒绝把
+  界面节点树给这个服务——权限范围比 root 小得多，也说得清。
+
+  packageNames 故意留空：目标应用是用户自己填的、可以随时改，
+  写在代码里没法变。过滤放在 GateService 里做。
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagDefault"
+    android:canRetrieveWindowContent="false"
+    android:notificationTimeout="100"
+    android:description="@string/gate_service_desc"
+    android:summary="@string/gate_service_summary" />

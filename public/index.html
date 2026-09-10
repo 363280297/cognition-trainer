@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#12131a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>认知训练 · 读懂言外之意</title>
+<meta name="description" content="读懂言外之意、练表达分寸。离线题库 + 情景对话 + 脑雾恢复。">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icon.svg">
+<link rel="stylesheet" href="/style.css">
+<link rel="manifest" href="/manifest.webmanifest">
+</head>
+<body>
+
+<header class="top">
+  <div class="brand">
+    <span class="dot" id="aiDot" title="AI 陪练状态"></span>
+    <h1>认知训练</h1>
+  </div>
+  <div class="stats">
+    <span class="chip" id="streakChip">🔥 0</span>
+    <span class="chip" id="todayChip">今日 0</span>
+    <button class="chip gear" onclick="openSettings()" title="设置">⚙</button>
+  </div>
+</header>
+
+<div class="meters" id="meters"></div>
+
+<main id="view"></main>
+
+<!--
+  底部分层按「你要做什么」分，不按功能名分。
+  7 个平铺 tab 的问题是：AI 的三个功能散在三处，而它们其实是同一类事（都在调模型、
+  都需要密钥）；离线训练的两个也散着。所以收紧成 5 个：
+    今天  —— 打开就该看的：达标进度、闸门状态、现实任务对账
+    练习  —— 离线训练（卡片 / 校准）
+    AI    —— 在线功能全部归这里（陪练 / 体检 / 复盘）
+    成长  —— 阶段评估、身份陈述、天花板声明
+    课程  —— 微课
+  设置留在右上角齿轮，不占 tab。
+-->
+<nav class="tabs" id="tabs">
+  <button data-tab="today" class="active"><b>今天</b><small>该做什么</small></button>
+  <button data-tab="practice"><b>练习</b><small>卡片 · 校准 · 微课 · 信号场</small></button>
+  <button data-tab="ai"><b>AI</b><small>对话 · 体检 · 复盘</small></button>
+  <button data-tab="growth"><b>成长</b><small>阶段 · 画像 · 预案</small></button>
+</nav>
+
+<div class="toast" id="toast"></div>
+
+<button class="fog-fab" id="fogFab" onclick="openFog()" title="突然想不动了？先停一下">
+  <span class="fog-dot"></span>卡住了
+</button>
+
+<button class="audio-fab" id="audioFab" onclick="audioToggle()" title="开背景声（设置里可以换音轨）">
+  <span class="audio-note">♪</span>声音
+</button>
+
+<script src="/voice.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>
