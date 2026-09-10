@@ -410,6 +410,43 @@ const COMBOS = [
 
   chk('全程没有 JS 报错', errs.length === 0, errs.slice(0, 2).join(' | '));
 
+  /* tab 条在窄屏上只留主标签，副标题收起来。
+     依据是机身实况量出来的：411 CSS px 宽 / 4 个 tab = 每个 103px，减去按钮内边距剩 95px，
+     而副标题在手机上要 110px 以上（Noto Sans CJK 比桌面的雅黑宽），
+     任何能读的字号都放不下——四个里三个折成两行，tab 条涨到 105px（含底部安全区）。
+     这一条守的是"别又把它加回来"：真要加回来，得先解决宽度，不是把断点删掉。
+     「宽屏还有、且是一行」这一条也钉住——收的是窄屏，不是把它删了。 */
+  {
+    const tabsAt = async (w) => {
+      const pg = await b.newPage({ viewport: { width: w, height: 900 } });
+      await pg.goto(OFFLINE);
+      await pg.waitForFunction('document.querySelector(".tabs button small")');
+      await pg.waitForTimeout(300);
+      const r = await pg.evaluate(() => {
+        const line = (e) => Math.max(1, Math.round(
+          e.getBoundingClientRect().height / (parseFloat(getComputedStyle(e).lineHeight) || 14)));
+        const all = [...document.querySelectorAll('.tabs button small')];
+        const shown = all.filter((e) => getComputedStyle(e).display !== 'none');
+        return {
+          disp: getComputedStyle(all[0]).display,
+          条高: Math.round(document.querySelector('.tabs').getBoundingClientRect().height),
+          可见条数: shown.length, 总条数: all.length,
+          行数: shown.map(line),
+        };
+      });
+      await pg.close();
+      return r;
+    };
+    const phone = await tabsAt(412);
+    chk('手机上（412px）副标题全部收起、tab 条回到单行高度',
+      phone.disp === 'none' && phone.可见条数 === 0 && phone.条高 <= 60, JSON.stringify(phone));
+    const wide = await tabsAt(900);
+    chk('宽屏（900px）副标题还在（收的只是窄屏，不是把它删掉）',
+      wide.disp !== 'none' && wide.可见条数 === wide.总条数, JSON.stringify(wide));
+    chk('宽屏下每一条副标题都排在一行（没有折行的）',
+      wide.行数.length > 0 && wide.行数.every((n) => n === 1), JSON.stringify(wide.行数));
+  }
+
   await b.close();
   console.log(fail ? `\n结果：${fail} 项未通过` : '\n结果：全部通过');
   process.exit(fail ? 1 : 0);

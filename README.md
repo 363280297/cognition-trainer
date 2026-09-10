@@ -878,7 +878,10 @@ py -3 tools/deliver.py          # 交付 + 清理（--dry 只看不删，--keep 
 三条硬约定：
 
 1. **`.tabs` 是外壳，不是正文**——它的字号故意比正文小一档（`--fs-sm`）。正文提到 15px 时
-   整条从 75 涨到 82px，而它下面那行 11px 副标题一个字也没变清楚。
+   整条从 75 涨到 82px，而它下面那行 11px 副标题一个字也没变清楚。副标题**在窄屏
+   （≤480px，也就是手机）上收起来**：机身只有 411 CSS px 宽，四个 tab 每个 103px，
+   而副标题要 110px 以上，任何能读的字号都放不下——不收就是三条折成两行。
+   那串副标题列的东西各页页内切换条上都有，不算丢信息。
 2. **按钮上的字永远不换行**（`white-space: nowrap`）。中文按钮被挤窄时会一格一个字竖着排，
    比撑宽难看。行内非主按钮再加 `flex-shrink: 0`。
 3. 顶部/底部留白用 `env(safe-area-inset-*)`，浮层高度用 `dvh` 不用 `vh`（键盘弹起时不被遮）。
@@ -901,6 +904,28 @@ node tools/shot_ui_step1.js   # 拍 9 张关键页，每张先跑一遍溢出扫
 用法是先 `git show HEAD:public/style.css > .tmpcmp/old-style.css`，再按 `diag_step1_layout.js`
 开头注释把两组页面拼出来。**怀疑某处是回归时先量一遍**——2.34 那次量出来的结论就和直觉相反
 （tab 副标题折行、"设置"竖排两处都不是那一步挤的，它们原来就这样）。
+
+### 在模拟器上看真机效果（2.34 起）
+
+这台机器的换算关系：`1080 / 420 dpi × 160 = 411 CSS px`，跟拍图用的 412px 视口只差 1px，
+所以**浏览器里量出来的布局对手机是成立的**。但有两件事只有真机能给答案：
+
+```
+# 模拟器（AVD eq34）启动后
+adb shell getprop sys.boot_completed        # 要等到 1
+adb install -r "E:/android-build/认知训练.apk"
+adb shell am start -n com.local.cognitiontrainer/.MainActivity
+adb exec-out screencap -p > output/real.png   # 截图
+adb shell input tap <x> <y>                   # 点击（坐标是设备像素，1080×2400）
+```
+
+- **折行以真机为准**：桌面 Chromium 走雅黑、手机走 Noto Sans CJK，
+  同样字号下中文字宽不一样。2.34 在浏览器里只看到一条 tab 副标题折行，真机上三条都折。
+- **安全区也要在真机上看**：WebView 是 edge-to-edge 的，`env(safe-area-inset-*)` 只有
+  真机会给出非零值（这台底部约 26px）。顶栏躲状态栏、tab 条躲手势条都靠它。
+- 截图不要凭"看起来像"下结论：2.34 一度以为 AI 页的「📋 历史」贴到屏幕边上了，
+  量完是左右各 16px 完全对称——用 `py -3 -c "from PIL import Image; …"` 把那一块
+  切出来放大两倍再看，比盯着整张图猜可靠得多。
 
 ---
 

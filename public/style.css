@@ -290,6 +290,18 @@ label.field > span { display: block; font-size: var(--fs-md); color: var(--dim);
 .tabs button small { font-size: var(--fs-xs); opacity: .6; }
 .tabs button.active { color: var(--accent); }
 
+/* 窄屏（手机）上把 tab 条那行副标题收起来——**这是量出来的，不是审美偏好**。
+   机身实况：1080×2400 / 420dpi = 411 CSS px 宽，四个 tab 每个只有 103px，
+   减去按钮自己的左右内边距剩 95px。而「卡片 · 校准 · 微课 · 信号场」在 11px 下
+   要 110px 以上（手机上 Noto Sans CJK 比桌面的雅黑更宽），**任何能读的字号都放不下**，
+   于是四个里三个折成两行、tab 条从 79 涨到 105px（含底部安全区）。
+   收掉之后每一页多出 30 多 px 内容。
+   信息没有丢：那串副标题列的东西，正是各页**页内切换条**上那几个按钮
+   （练习：卡片/语境校准/微课/信号场，AI：场景对话/表达体检/真实复盘，
+   成长：阶段/偏差画像/我的预案），点进去就看得见，不必在 tab 上再念一遍。
+   桌面宽屏（>480px）保留副标题。 */
+@media (max-width: 480px) { .tabs button small { display: none; } }
+
 /* ---------- toast ---------- */
 .toast {
   position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%) translateY(10px);
