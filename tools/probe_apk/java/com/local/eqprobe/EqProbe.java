@@ -153,7 +153,75 @@ public class EqProbe extends Activity {
             p("系统里已启用的无障碍服务", enabled == null ? "（无）" : enabled);
         });
 
+        // ---- 5 /proc：能不能绕开 Java API 直接列进程 ----
+        // 这条决定"普通应用到底能不能知道谁在跑"。安卓 7 起说是不让读了，
+        // 但我不想凭记忆——它会直接影响"没有权限就是没检测"这个判断能不能成立。
+        section("F-/proc", () -> {
+            java.io.File[] ents = new java.io.File("/proc").listFiles();
+            int total = ents == null ? -1 : ents.length;
+            int numeric = 0, readable = 0, mine = 0, others = 0;
+            StringBuilder sample = new StringBuilder();
+            if (ents != null) {
+                for (java.io.File f : ents) {
+                    if (!f.getName().matches("\\d+")) continue;
+                    numeric++;
+                    try (java.io.FileInputStream in =
+                             new java.io.FileInputStream(new java.io.File(f, "cmdline"))) {
+                        byte[] b = new byte[512];
+                        int n = in.read(b);
+                        if (n > 0) {
+                            readable++;
+                            String s = new String(b, 0, n).replace('\0', ' ').trim();
+                            if (s.contains("eqprobe")) mine++;
+                            else {
+                                others++;
+                                if (sample.length() < 90) sample.append(s.split(" ")[0]).append(' ');
+                            }
+                        }
+                    } catch (Throwable ignored) {
+                        // 读不到就是读不到，不计入
+                    }
+                }
+            }
+            p("/proc 条目总数", total);
+            p("/proc 里纯数字目录", numeric);
+            p("/proc 里能读出 cmdline 的", readable);
+            p("/proc 里读到自己的", mine);
+            p("/proc 里读到**别的**进程的名字", others);
+            p("/proc 别的进程样例", sample.toString().trim());
+        });
+
+        // ---- 6 别的应用"跑过没有"的粗信号 ----
+        // ApplicationInfo.FLAG_STOPPED：安装后从没启动过 / 被强行停止过 → 置位。
+        // 注意它**不等于"现在在跑"**，只能说"被停止之后没再起来过"。是个粗信号。
+        section("G-停止标志", () -> {
+            StringBuilder sb = new StringBuilder();
+            for (String t : THIRD_PARTY) {
+                try {
+                    ApplicationInfo ai = pm.getApplicationInfo(t, 0);
+                    sb.append(t.substring(t.lastIndexOf('.') + 1))
+                      .append('=').append((ai.flags & ApplicationInfo.FLAG_STOPPED) != 0 ? "已停止" : "启动过")
+                      .append(' ');
+                } catch (PackageManager.NameNotFoundException e) {
+                    sb.append(t.substring(t.lastIndexOf('.') + 1)).append("=看不见 ");
+                }
+            }
+            p("FLAG_STOPPED", sb.toString().trim());
+        });
+
+        // ---- 7 退出历史（Android 11+）是不是只管自己 ----
+        section("H-退出历史", () -> {
+            ActivityManager am = (ActivityManager) ctx.getSystemService(Context.ACTIVITY_SERVICE);
+            List<android.app.ApplicationExitInfo> mineExit =
+                am.getHistoricalProcessExitReasons(null, 0, 5);
+            p("自己的退出历史条数", mineExit == null ? -1 : mineExit.size());
+            List<android.app.ApplicationExitInfo> otherExit =
+                am.getHistoricalProcessExitReasons("com.android.settings", 0, 5);
+            p("别家的退出历史条数", otherExit == null ? -1 : otherExit.size());
+        });
+
         p("done", "1");
     }
 }
+
 

@@ -117,6 +117,10 @@ FIELDS = [
     "MediaProjectionManager", "captureIntent",
     "系统里已启用的无障碍服务",
     "A-读应用", "B-用量统计", "C-运行进程", "D-截屏", "E-无障碍",
+    "/proc 条目总数", "/proc 里纯数字目录", "/proc 里能读出 cmdline 的",
+    "/proc 里读到自己的", "/proc 里读到**别的**进程的名字", "/proc 别的进程样例",
+    "FLAG_STOPPED", "自己的退出历史条数", "别家的退出历史条数",
+    "F-/proc", "G-停止标志", "H-退出历史",
 ]
 # 这些是"被拦住"的标记，出现即算变化
 BLOCK_MARK = "被拦住"
