@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  一次性探针 App 的清单。它**不是**认知训练的一部分，也不会进任何交付物：
+  它的唯一用途是量出「安卓到底让一个普通应用看到多少别的应用」。
+
+  特意做得很素：没有资源、没有图标、没有权限申请。
+  没有 QUERY_ALL_PACKAGES —— 我们要量的正是"没有它的时候看得见什么"。
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.local.eqprobe"
+    android:versionCode="1"
+    android:versionName="0.1">
+
+    <!--
+      这两个权限是**为了让探针能测出东西**，不是要真去用它们：
+      · QUERY_ALL_PACKAGES —— 第一版没声明，于是"关掉 QUERY_ALL_PACKAGES 有没有用"
+        根本测不出来：探针本来就没有这个权限，关它当然没变化。要量一个开关，
+        得先让被测对象**本来拿着**那个能力。
+      · PACKAGE_USAGE_STATS —— 用量统计是权限 + appop 两道门。不声明权限的话，
+        不管 appop 是什么样，queryUsageStats 都返回空，基线就永远是 0、没得比。
+    -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
+
+    <application
+        android:label="appops 探针"
+        android:allowBackup="false">
+        <activity
+            android:name=".EqProbe"
+            android:exported="true"
+            android:excludeFromRecents="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
+
