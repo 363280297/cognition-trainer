@@ -685,7 +685,7 @@ Sachdeva、Iliev & Medin（2009）让被试写自己身上的正面道德特质�
 |---|---|
 | 包名 | `com.local.cognitiontrainer` |
 | 应用名 | 认知训练 |
-| versionCode / versionName | 35 / 2.33 |
+| versionCode / versionName | 36 / 2.34 |
 | minSdk / targetSdk | 26（Android 8.0+） / 34 |
 | 权限 | `INTERNET`、`POST_NOTIFICATIONS`、`RECEIVE_BOOT_COMPLETED`、`SYSTEM_ALERT_WINDOW`；另有 `WRITE/READ_EXTERNAL_STORAGE`，带 `maxSdkVersion=28`（新系统上不会被请求）。**没有 `RECORD_AUDIO`** |
 | 体积 | 约 0.5 MB（不需要任何 native 库） |
@@ -857,6 +857,50 @@ py -3 tools/deliver.py          # 交付 + 清理（--dry 只看不删，--keep 
 - 反馈给**原理和方向**，不给逐字模板。研究显示纯行为脚本训练的迁移性很差（效果集中在自评量表里，6 个月后消失），而认知框架训练向未训练情境的迁移明显更好。
 - **五项爱的语言**和**「90% 能预测离婚」**这两条流行理论都没通过验证，App 里没有避开它们，而是做成了两张纠错卡——你以后到处都会看到它们，得知道哪里站不住。
 - 游戏化只做内部指标（连续打卡、熟练度），**不做排行榜**：研究显示排行榜会导致压力和放弃。
+
+---
+
+## 改界面之前先读这一段（2.34 起）
+
+`public/style.css` 是**唯一一份**样式，离线单文件版就是把这一份内联进去（`build_offline.py`），
+所以改这一份 = 改手机上的样子。2.34 起它上面有一层变量（`:root`），写样式**从这里取值，别写字面量**：
+
+| 类别 | 变量 | 说明 |
+|---|---|---|
+| 表面/描边/文字 | `--bg` `--panel` `--panel2` `--line` `--line-strong` `--text` `--dim` | 面板深灰只有两档，描边只有两档 |
+| 语义色（6 家族） | `--accent` `--good` `--warn` `--bad` `--purple` `--warm`，每个再带 `-bg` / `-line` / `-fg` | 一个家族管一件事：主色、底色、描边、底色上的浅字 |
+| 字号（5 档） | `--fs-xs` 11px / `--fs-sm` 13px / `--fs-md` 15px / `--fs-lg` 18px / `--fs-xl` 22px | `--fs-md` 是正文。**别再临时加第 6 个字号** |
+| 间距（6 档） | `--sp-1` 4 / `--sp-2` 8 / `--sp-3` 12 / `--sp-4` 16 / `--sp-5` 20 / `--sp-6` 28 | 只管布局节奏（gap、卡片内边距、区块间距） |
+| 圆角（4 档） | `--r-sm` 8 / `--r-md` 12 / `--r-lg` 16 / `--r-pill` 999 | 小块 / 卡片 / 大面 / 胶囊 |
+| 层级（7 档） | `--z-top` 20 < `--z-tab` 30 < `--z-fab` 40 < `--z-sheet` 50 < `--z-pop` 60 < `--z-gate` 80 < `--z-toast` 90 | **顺序不能乱**：铺之前 toast 和 pop 都是 60（互相盖）、闸门 80 让 toast 永远看不见 |
+| 阴影 | `--shadow-fab` `--shadow-sheet` | 两个浮标共用 |
+
+三条硬约定：
+
+1. **`.tabs` 是外壳，不是正文**——它的字号故意比正文小一档（`--fs-sm`）。正文提到 15px 时
+   整条从 75 涨到 82px，而它下面那行 11px 副标题一个字也没变清楚。
+2. **按钮上的字永远不换行**（`white-space: nowrap`）。中文按钮被挤窄时会一格一个字竖着排，
+   比撑宽难看。行内非主按钮再加 `flex-shrink: 0`。
+3. 顶部/底部留白用 `env(safe-area-inset-*)`，浮层高度用 `dvh` 不用 `vh`（键盘弹起时不被遮）。
+
+改完样式**必跑**：
+
+```
+py -3 tools/run_checks.py     # 26 项，其中 check_today_ui / check_tabs_unique / check_audio 专盯样式行为
+node tools/audit_project.js   # 版本一致性、权限数、产物新鲜度
+node tools/shot_ui_step1.js   # 拍 9 张关键页，每张先跑一遍溢出扫描（会点名被裁掉的文字）
+```
+
+`tools/design_tokens.py`（颜色/字号/圆角/间距迁移）、`css_structure_fix.py`（层级与安全区）、
+`css_drop_dead.py`（删死规则，仍被引用的拒绝删）、`css_merge_dupes.py`（合并重复组件，类名只合并不重命名）
+是 2.34 那次迁移用的，留着是为了**同一套规则以后能对新增样式再跑一遍**——它们都带自查，
+不合格就退出码非 0。
+
+`tools/diag_step1_layout.js` 和 `tools/probe_step1_spots.js` 是"改完样式到底挤动了什么"的**量尺**：
+它们拿 git 里上一版 `style.css` 拼一份对照页面，新旧两边跑同一段测量再求差。
+用法是先 `git show HEAD:public/style.css > .tmpcmp/old-style.css`，再按 `diag_step1_layout.js`
+开头注释把两组页面拼出来。**怀疑某处是回归时先量一遍**——2.34 那次量出来的结论就和直觉相反
+（tab 副标题折行、"设置"竖排两处都不是那一步挤的，它们原来就这样）。
 
 ---
 
