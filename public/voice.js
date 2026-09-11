@@ -27,7 +27,7 @@ const V = {
   native: (typeof EQNative !== 'undefined') ? EQNative : null,
   /* 原生能力。**只剩语音合成**：识别（听你说话）整块在 2.31 被删掉了，
      所以这里没有 asr / mic / local 这些字段了。见下面「为什么不做语音输入」。 */
-  caps: { tts: false, http: false, music: false },
+  caps: { tts: false, http: false, music: false, shot: false },
   /* 用户自己那条音乐的状态（原生送过来）。has=选过、name=文件名、playing=在放、
      persist=是不是"重启后仍然有效"的授权。界面只读这一份，不自己猜。 */
   music: { has: false, name: '', playing: false, persist: true },
@@ -119,6 +119,10 @@ function settings() {
   try { s = JSON.parse(localStorage.getItem(SET_KEY) || '{}'); } catch (e) { }
   return Object.assign({
     apiKey: '', model: MODEL_FAST,
+    /* 截图转文字用的视觉模型。留空 = 用它代码里那个默认值（VISION_MODEL）。
+       单独一个字段是因为**它必须和对话模型不同**：文本模型收不下图片。
+       允许用户改，是因为官方那个名字带 Exp 后缀，将来可能改名。 */
+    visionModel: '',
     baseUrl: 'https://api.deepseek.com/chat/completions',
     maxTokens: 3000, rate: 1, pitch: 1, autoSpeak: true,
     /* 这里原来有 handsFree 和 asrOffline 两条（免提开关、识别在线/离线偏好）。
@@ -264,6 +268,31 @@ window.__onHttp = function (id, resultJson) {
   w(res);
 };
 
+/**
+ * 原生发给网页的对象，**到手时是一个 JSON 字符串**，不是对象。
+ *
+ * 这个约定必须记住，因为它的失败方式特别隐蔽：原生那边把 JSON 用
+ * JSONObject.quote 包成 JS 字符串字面量再注入（`__onX("{\"ok\":true}")`），
+ * 所以 JS 收到的 typeof 是 'string'。而处理函数如果直接读 payload.ok，
+ * 得到的是 undefined —— 不报错、不抛异常，只是**每一路都走了"不成立的默认分支"**。
+ *
+ * 这个坑真的踩到了，两个功能各中一次：
+ *   · 复盘传截图：一直提示「没识别成功：没选到图片」，而原生日志明明是
+ *     `emit ok=true len=43195` —— 图读出来了、base64 也送过来了，JS 却把它
+ *     当成"没有 payload"。查了半天怀疑桥、怀疑权限、怀疑选择器，最后是在
+ *     __onShot 里临时把 typeof payload 打到界面上才看见是 'string'。
+ *   · 音乐状态：onMusicState 开头 `typeof o !== 'object'` 直接 return，
+ *     于是「选好了」的提示和播放状态更新从来没生效过（同样是静默的）。
+ *
+ * 所以统一从这里过一道。**以后新增任何 __onXxx，第一步都调它。**
+ */
+function bridgeObj(x) {
+  if (typeof x === 'string') {
+    try { return JSON.parse(x); } catch (e) { return null; }
+  }
+  return (x && typeof x === 'object') ? x : null;
+}
+
 
 window.__onSpeak = function (state) {
   if (state === 'unavailable') {
@@ -365,11 +394,15 @@ function llmSystem(sc) {
   ].join('\n');
 }
 
-async function llmCallOnce(messages, temperature, maxTokens, noFormat, textOk) {
+async function llmCallOnce(messages, temperature, maxTokens, noFormat, textOk, modelOverride) {
   const s = settings();
   if (!s.apiKey && V.native) throw new Error('还没填 API 密钥：点右上角 ⚙ 填一次就行');
+  /* 这一次实际用的模型名。绝大多数调用就是设置里那个；只有「截图转文字」
+     要换成视觉模型（文本模型收不下图片）。报错里也必须用它——不然用户
+     看到的是"你的模型 xxx 出错"，而他明明配的是另一个。 */
+  const mdl = (modelOverride || '').trim() || s.model;
   const body = {
-    model: s.model,
+    model: mdl,
     messages,
     max_tokens: maxTokens || s.maxTokens,
     temperature: temperature == null ? 0.9 : temperature,
@@ -423,7 +456,7 @@ async function llmCallOnce(messages, temperature, maxTokens, noFormat, textOk) {
   }
 
   if (!res.status || res.status < 200 || res.status >= 300) {
-    throw new Error(httpProblem(res, url, s.model));
+    throw new Error(httpProblem(res, url, mdl));
   }
   if (fellBack) {
     // 让设置页下次打开时把这件事说出来，而不是悄悄改了地址
@@ -457,7 +490,7 @@ async function llmCallOnce(messages, temperature, maxTokens, noFormat, textOk) {
       reasoning: ((ch0 && ch0.message && ch0.message.reasoning_content) || '').length,
       completion: (j.usage && j.usage.completion_tokens) || 0,
       prompt: (j.usage && j.usage.prompt_tokens) || 0,
-      model: j.model || s.model,
+      model: j.model || mdl,
       url: url,
       noFormat: !!noFormat,
       head: String(res.body || '').slice(0, 200),
@@ -537,7 +570,7 @@ async function llmCall(messages, opts) {
 
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      return await llmCallOnce(messages, temperature, budget, noFormat, textOk);
+      return await llmCallOnce(messages, temperature, budget, noFormat, textOk, o.model);
     } catch (e) {
       if (e.truncated) {
         if (!truncRetried && budget < 12000) {
@@ -2623,7 +2656,7 @@ function setSectionHtml() {
     <p class="set-note" style="margin-top:12px">${backupStatusText()}</p>`;
   if (setSection === 'about') return `
     <div class="set-h">关于</div>
-    <p class="set-note">版本 2.34（versionCode 36）· 离线可用 · 权限 6 个
+    <p class="set-note">版本 2.36（versionCode 38）· 离线可用 · 权限 6 个
     （网络、通知、开机自启、悬浮窗，加两个只对 Android 8 及以下生效的存储权限）。
     <b>没有录音权限</b>：这一版起 App 不录音了，你打字，她出声。安装包约 0.5 MB。</p>
     <p class="set-note">密钥只存在这台手机的本地存储里，不会上传到任何地方，
@@ -3182,5 +3215,230 @@ async function testLlm() {
     if (out) out.textContent = '连上了：' + JSON.stringify(t).slice(0, 60);
   } catch (e) {
     if (out) out.textContent = '失败：' + e.message;
+  }
+}
+
+/* ================================================== 聊天截图 → 文字（OCR）
+ *
+ * 用户的要求：「复盘那一栏加上一个上传聊天截图的功能。一般来说只需要图片识别成
+ * 文字就行，不需要真正的识图。」
+ *
+ * 为什么走模型而不是本机 OCR：
+ *   安卓没有内置的文字识别 API。ML Kit 要么依赖 Google 服务、要么得塞原生库，
+ *   而这个项目的构建**明确断言 APK 里一个 native 库都没有**（见 build_apk.py
+ *   里那段 stray 检查，2.31 撤掉离线识别之后才做到 0.5MB）。
+ *   为了 OCR 把几十 MB 的原生库背回来，代价远大于收益。
+ *   而 DeepSeek 已经上线了视觉模型，用的还是同一个 key、同一个端点、
+ *   同一套 OpenAI 兼容格式——那就用现成的路。
+ *
+ * 两个容易踩的坑，都在这里处理掉：
+ *   1. 长截图会被压糊。官方说图片会自动缩放到「总像素约相当于 800×800」。
+ *      聊天的长截图（1080×2400）按这个缩放完，正文只剩 7px 上下，字就糊了。
+ *      所以这里**先把长图竖着切成几段**，每段单独作为一张图送进去——
+ *      多图请求里每张图的 token 是独立算的（每张上限 384），所以切开不额外贵多少，
+ *      但每段的字都保住了清晰度。
+ *   2. 静默失败。如果模型不支持图片，接口可能**不报错**，只是把图忽略掉，
+ *      然后回一段通顺但跟你的截图毫无关系的话。那种最难查。所以下面把「回的内容
+ *      里有没有聊天的痕迹」也验一遍，不像就明说。 */
+
+/* 视觉模型的名字。官方目前是 deepseek-v4-flash-vision-exp（实验性），
+   带 Exp 后缀说明它可能改名——所以允许在设置里覆盖，而不是写死。 */
+const VISION_MODEL = 'deepseek-v4-flash-vision-exp';
+/* 一张图最长的一边缩到多少。1400 是个折中：手机截图的文字在这个尺寸下还很清楚，
+   而 base64 之后通常只有一两百 KB，过 JS 桥和上传都不费劲。 */
+const SHOT_MAX_SIDE = 1400;
+/* 切成几段。3 段 × 每张 384 token ≈ 1150 token，可接受。 */
+const SHOT_MAX_PARTS = 3;
+/* 总 base64 的硬上限。超过就如实拒绝，而不是发一个几 MB 的请求去赌。 */
+const SHOT_TOTAL_LIMIT = 3.5 * 1024 * 1024;
+
+function visionModelName() {
+  const s = settings();
+  return (s.visionModel || '').trim() || VISION_MODEL;
+}
+
+/** 把一张图缩到 maxSide 以内。返回 dataURL。 */
+function drawScaled(img, maxSide) {
+  const w0 = img.naturalWidth || img.width;
+  const h0 = img.naturalHeight || img.height;
+  const k = Math.min(1, maxSide / Math.max(w0, h0));
+  const w = Math.max(1, Math.round(w0 * k));
+  const h = Math.max(1, Math.round(h0 * k));
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  // 白底：聊天截图有的带透明，直接存 JPEG 会把透明变黑，字看不清。
+  g.fillStyle = '#fff'; g.fillRect(0, 0, w, h);
+  g.drawImage(img, 0, 0, w, h);
+  return { dataUrl: c.toDataURL('image/jpeg', 0.82), w, h };
+}
+
+/**
+ * 一张图 → 若干张（长图竖切）。
+ *
+ * 为什么不重叠：重叠会让同一行字在两段里各出现一次，于是抄出来的记录里有重复，
+ * 而"重复一句"比"少半句"更难发现——用户会以为是自己看错了。
+ * 不重叠的代价是**可能从一行字中间切断**，那一行可能漏掉。两害相权取了后者，
+ * 并且把这件事写在这里：真要彻底解决，得做行边界检测，那是另一个量级的事。
+ */
+function sliceTall(img) {
+  const w0 = img.naturalWidth || img.width;
+  const h0 = img.naturalHeight || img.height;
+  const ratio = h0 / Math.max(1, w0);
+  if (ratio <= 2.4) return [drawScaled(img, SHOT_MAX_SIDE)];   // 不长，不切
+  /* 想切的段数：让每段的高宽比落到 1.2~2.4 这个区间（约等于一屏多一点）。 */
+  let parts = Math.min(SHOT_MAX_PARTS, Math.max(2, Math.round(ratio / 1.8)));
+  parts = Math.max(1, Math.min(SHOT_MAX_PARTS, parts));
+  const k = Math.min(1, SHOT_MAX_SIDE / w0);
+  const w = Math.round(w0 * k);
+  const out = [];
+  const whole = document.createElement('canvas');
+  whole.width = w; whole.height = Math.round(h0 * k);
+  const wg = whole.getContext('2d');
+  wg.fillStyle = '#fff'; wg.fillRect(0, 0, whole.width, whole.height);
+  wg.drawImage(img, 0, 0, whole.width, whole.height);
+  const each = Math.ceil(whole.height / parts);
+  for (let i = 0; i < parts; i++) {
+    const y = i * each;
+    const hh = Math.min(each, whole.height - y);
+    if (hh <= 8) continue;
+    const c = document.createElement('canvas');
+    c.width = whole.width; c.height = hh;
+    const g = c.getContext('2d');
+    g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+    g.drawImage(whole, 0, y, whole.width, hh, 0, 0, whole.width, hh);
+    out.push({ dataUrl: c.toDataURL('image/jpeg', 0.82), w: whole.width, h: hh, part: i + 1, parts });
+  }
+  return out;
+}
+
+const OCR_SYS = `你在把聊天截图转成文字，供后续分析使用。只做转录，不做解读、不评价、不补全。
+
+规则：
+1. 逐条抄下图里出现的每一句，**保持原有顺序**。
+2. 每句前面标出说话人。截图里通常是左右分布的两方：如果气泡在右侧、或明显是机主自己发的，标「我：」；
+   另一侧标「对方：」。如果图里已经写了名字（微信昵称等），就用那个名字。
+3. 同一句话因为换行被拆成多行时，合成一行，不要插入额外空格。
+4. 表情、图片、语音、转账等非文字内容，用 [表情] [图片] [语音] [转账] 这样标注。
+5. **看不清的字用 ？ 代替，不要猜**。整条看不清就写 [这条看不清]。
+6. 截图顶部/底部的时间、电量、输入框里的字不要抄。
+7. 如果两张图之间有重复的内容，只保留一次。
+8. 不输出任何解释、标题或代码块，直接输出转录结果。`;
+
+/**
+ * 截图 → 文字。images 是 [{dataUrl, w, h, part, parts}]。
+ * 返回 { text, parts }——text 是转录结果，parts 是实际送了几张图。
+ */
+async function ocrChatShots(images) {
+  const total = images.reduce((n, x) => n + x.dataUrl.length, 0);
+  if (total > SHOT_TOTAL_LIMIT) {
+    throw new Error(`图太大了（${(total / 1024 / 1024).toFixed(1)} MB），传不动。`
+      + '先在相册里裁掉不需要的部分，或者少传一张。');
+  }
+  const blocks = [{
+    type: 'text',
+    text: images.length > 1
+      ? `这是同一段聊天记录的 ${images.length} 张截图，按顺序拼起来就是完整记录。请转录。`
+      : '请转录这张聊天截图。',
+  }];
+  images.forEach((im) => {
+    blocks.push({ type: 'image_url', image_url: { url: im.dataUrl } });
+  });
+  const r = await llmCall(
+    [{ role: 'system', content: OCR_SYS }, { role: 'user', content: blocks }],
+    { temperature: 0, maxTokens: 4000, noFormat: true, textOk: true, model: visionModelName() });
+  const text = String((r && (r.reply || r.text)) || '').trim();
+  if (!text) throw new Error('模型没返回文字');
+  /* 「静默忽略图片」的兜底：模型会回一段通顺的话，但里面没有任何转录的样子
+     （没有「我：」「对方：」这类标记，也没有换行）。那种结果必须说出来，
+     而不是让用户拿着一堆二手分析去复盘一段不存在的对话。 */
+  const looksLikeTranscript = /[:：]/.test(text) || text.split('\n').length >= 2;
+  if (!looksLikeTranscript) {
+    throw new Error('模型回了内容，但看不出是聊天记录（可能是它没读图，只顺着话答了）。'
+      + `原样返回是：${text.slice(0, 80)}`);
+  }
+  return { text, parts: images.length };
+}
+
+/** 读一个 File/Blob 成 dataURL（电脑上走这条路，手机上不经过它）。 */
+function readAsDataUrl(file) {
+  return new Promise((res, rej) => {
+    const fr = new FileReader();
+    fr.onload = () => res(String(fr.result));
+    fr.onerror = () => rej(new Error('读不了这个文件'));
+    fr.readAsDataURL(file);
+  });
+}
+
+function loadImage(src) {
+  return new Promise((res, rej) => {
+    const im = new Image();
+    im.onload = () => res(im);
+    im.onerror = () => rej(new Error('这张图打不开（可能不是常见格式）'));
+    im.src = src;
+  });
+}
+
+/**
+ * 让用户选聊天截图。
+ *
+ * 两条路：手机上走原生（ACTION_OPEN_DOCUMENT，跟选音乐同一套，WebView 里
+ * <input type=file> 因为没设 WebChromeClient 是打不开的）；电脑上走隐藏的
+ * file input——**这条不只是为了电脑能用，它让这个功能可以在自动化里被真的测到**
+ * （Playwright 的 setInputFiles 能喂图进去）。
+ */
+function pickChatShots() {
+  if (V.native && V.caps && V.caps.shot) {
+    try { V.native.shotPick(); } catch (e) { toast('打不开图片选择器'); }
+    return;
+  }
+  let inp = document.getElementById('shotInput');
+  if (!inp) {
+    inp = document.createElement('input');
+    inp.type = 'file';
+    inp.id = 'shotInput';
+    inp.accept = 'image/*';
+    inp.multiple = true;
+    inp.style.display = 'none';
+    inp.addEventListener('change', () => { onShotsPicked(inp.files); inp.value = ''; });
+    document.body.appendChild(inp);
+  }
+  inp.click();
+}
+
+/** 原生选完图 → 这里。payload 是 {ok, dataUrl, name} 或 {ok:false, why}。 */
+/** 原生选完图 → 这里。payload 是 {ok, dataUrl, name} 或 {ok:false, why}。
+ *  注意到手的是 **JSON 字符串**（见 bridgeObj 的说明），要先归一化。 */
+window.__onShot = function (payload) {
+  payload = bridgeObj(payload);
+  if (!payload || !payload.ok) {
+    if (typeof shotDone === 'function') shotDone(null, (payload && payload.why) || '没选到图片');
+    return;
+  }
+  loadImage(payload.dataUrl)
+    .then((im) => {
+      const parts = sliceTall(im);
+      return ocrChatShots(parts);
+    })
+    .then((r) => { if (typeof shotDone === 'function') shotDone(r, null); })
+    .catch((e) => { if (typeof shotDone === 'function') shotDone(null, e.message); });
+};
+
+/** 电脑上从 input 拿到的文件 → 同样的处理链。 */
+async function onShotsPicked(files) {
+  if (!files || !files.length) return;
+  if (typeof shotDownloading === 'function') shotDownloading();
+  try {
+    const imgs = [];
+    for (const f of Array.from(files).slice(0, SHOT_MAX_PARTS)) {
+      const url = await readAsDataUrl(f);
+      const im = await loadImage(url);
+      sliceTall(im).forEach((p) => { if (imgs.length < SHOT_MAX_PARTS) imgs.push(p); });
+    }
+    if (!imgs.length) throw new Error('没有可用的图片');
+    const r = await ocrChatShots(imgs);
+    if (typeof shotDone === 'function') shotDone(r, null);
+  } catch (e) {
+    if (typeof shotDone === 'function') shotDone(null, e.message);
   }
 }

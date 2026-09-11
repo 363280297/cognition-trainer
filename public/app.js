@@ -54,7 +54,7 @@ const DEFAULT_STATE = {
   // 依据：错过一次对习惯养成没有实质影响，但累积的错过会显著降低最终达到的
   // 自动化水平（Lally 等 2010）；真正杀死习惯的是「反正已经破了」的连锁反应
   // （what-the-hell effect，Marlatt & Gordon 的复发预防研究）。
-  daily: { date: null, cards: 0, lessons: 0, extra: 0, skipped: false, met: false, fogPass: false, metAt: null },
+  daily: { date: null, cards: 0, lessons: 0, extra: 0, tried: 0, skipped: false, met: false, fogPass: false, metAt: null },
   dailyLog: [],       // [{ date, cards, lessons, extra, met, skipped, fogPass }]
   // 护城河设置：达标之前不许打开的目标应用（由 JS 计算是否武装，原生只负责执行）
   // rootKnown / rootOk 是三态而不是布尔：null 表示「还没探测过」。
@@ -1165,7 +1165,11 @@ function answerCard(chosen) {
 
   rate(card.id, ok);
   bump('interpret', ok ? 3 : half ? 1 : 0);
-  bumpDaily('card');
+  /* 达标只认「判对」的那一次：
+     · 有读局步骤 → 看读局判对没有（genreOk 在上面算好了，和关卡同一个标准）
+     · 没有读局步骤 → 看动作有没有选到最好的那个（ok）
+     half（也算说得通）不算，见 bumpDaily 的说明。 */
+  bumpDaily('card', card.genre ? genreOk === true : ok === true);
 }
 
 /* ------------------------------------------------------------ 行动预案
@@ -1470,8 +1474,17 @@ function renderReplayStep1() {
         贴一段真实的聊天记录。它不会直接告诉你怎么回——先出题让你自己判断，
         你答完才揭晓。这样练的是判断力，不是复制粘贴。
       </p>
+      <p class="hint" style="margin:8px 0 0">
+        懒得打字就<b>传截图</b>：它会把图里的聊天记录抄成文字填进来（长截图会自动切成几段，
+        免得字糊）。抄完先看一眼、改一改再往下走。
+      </p>
+      <div class="row" style="margin-top:12px">
+        <button class="ghost" id="rpShotBtn" onclick="startShotOcr()">📷 上传聊天截图</button>
+      </div>
+      <div id="rpShotState" class="hint" style="margin-top:10px"></div>
       <p class="warnbox" style="margin:14px 0">
-        <b>隐私提醒</b>：贴进来的内容会发送到 DeepSeek API。建议先把名字、手机号、住址改掉再贴。
+        <b>隐私提醒</b>：贴进来的文字、<b>以及你选的截图本身</b>都会发到模型接口去处理
+        （截图只在识别的那一次发出去，App 不留它）。建议先把名字、手机号、住址改掉再贴。
       </p>
       <label class="field"><span>聊天记录</span>
         <textarea id="rpChat" rows="7" placeholder="她：&#10;我：（把她和你自己的话区分开写，标上是谁说的）">${esc(replay.chat)}</textarea></label>
@@ -1480,6 +1493,52 @@ function renderReplayStep1() {
       <button class="primary" id="rpBtn" onclick="runReplayQuestions()">出题</button>
     </div>
     <div id="rpOut"></div>`;
+}
+
+/* ------------------------------------------------- 截图 → 文字（复盘用）
+ *
+ * 识别本身在 voice.js（选图 / 切段 / 调视觉模型）。这里只管界面：
+ * 按一下 → 说清"在处理" → 成功就把文字填进输入框，失败就说失败在哪。
+ *
+ * 一条刻意的设计：**填进去之后不自动往下走**。抄错了（尤其长截图切段的地方）
+ * 如果不看一眼就出题，后面整套分析都建立在错字上，而用户不会知道。
+ * 所以这里只填、不点，把"看一眼"这一步留在它该在的地方。 */
+
+function shotDownloading() {
+  const el = $('#rpShotState');
+  if (el) el.innerHTML = '<span class="spin"></span> 正在压缩并识别…（长截图要十几秒）';
+  const b = $('#rpShotBtn');
+  if (b) b.disabled = true;
+}
+
+function startShotOcr() {
+  shotDownloading();
+  pickChatShots();
+}
+
+/** 识别结束。r 是 {text, parts} 或 null；why 是失败原因。 */
+function shotDone(r, why) {
+  const el = $('#rpShotState');
+  const b = $('#rpShotBtn');
+  if (b) b.disabled = false;
+  if (!r) {
+    if (el) {
+      el.innerHTML = `<span style="color:var(--bad-fg)">没识别成功：${esc(why || '未知原因')}</span>`
+        + `<br><span style="color:var(--dim)">可以直接打字贴进来，不影响后面的分析。</span>`;
+    }
+    return;
+  }
+  const box = $('#rpChat');
+  if (box) {
+    // 追加而不是覆盖：万一他先手打了一段、又把截图补上，不该把已经打的字抹掉。
+    const old = box.value.trim();
+    box.value = old ? (old + '\n' + r.text) : r.text;
+    box.scrollTop = box.scrollHeight;
+  }
+  if (el) {
+    el.innerHTML = `识别完成（${r.parts} 张图）。`
+      + `<b>先看一眼再点「出题」</b>——长截图切段的地方可能有漏字或重复，改一下更准。`;
+  }
 }
 
 async function runReplayQuestions() {
@@ -1585,6 +1644,36 @@ function renderReplayReveal(res) {
       ${res.your_part.map((y) => `<div style="margin-top:10px">
         <div class="quote" style="font-size:1rem;margin-bottom:6px">「${rich(y.quote)}」</div>
         <div>${esc(y.effect)}</div></div>`).join('')}
+    </div>` : ''}
+    ${res.how_to_reply ? `<div class="card">
+      <h3>现在该怎么回</h3>
+      ${res.how_to_reply.situation ? `<div class="hint" style="margin-top:8px">${rich(res.how_to_reply.situation)}</div>` : ''}
+      ${res.how_to_reply.say ? `<div style="margin-top:12px;padding:var(--sp-3);border-radius:var(--r-sm);
+        background:var(--accent-bg);border:1px solid var(--accent-line)">
+        <div class="label" style="color:var(--accent-fg)">可以这么回</div>
+        <div style="margin-top:6px;font-size:var(--fs-md)">${rich(res.how_to_reply.say)}</div></div>` : ''}
+      ${res.how_to_reply.why ? `<div style="margin-top:10px"><div class="label">为什么这么回</div>
+        <div style="margin-top:4px">${rich(res.how_to_reply.why)}</div></div>` : ''}
+      ${res.how_to_reply.avoid ? `<div style="margin-top:10px;padding:var(--sp-3);border-radius:var(--r-sm);
+        background:var(--bad-bg);border:1px solid var(--bad-line)">
+        <div class="label" style="color:var(--bad-fg)">千万别这么回</div>
+        <div style="margin-top:6px">${rich(res.how_to_reply.avoid)}</div></div>` : ''}
+      <p class="hint" style="margin-top:12px">这是<b>一个</b>可行的说法，不是标准答案。
+        照着念会不像你——把人称、语气换成你自己的。</p>
+    </div>` : ''}
+    ${(res.branches || []).length ? `<div class="card">
+      <h3>如果她下一步这么说</h3>
+      <p class="hint" style="margin-top:6px">同一句之后可能往几个方向走，先想一遍，真遇上了就不慌。</p>
+      ${res.branches.map((b, i) => `
+        <div style="margin-top:14px;padding-top:14px;${i ? 'border-top:1px solid var(--line)' : ''}">
+          <div class="quote" style="font-size:var(--fs-md);margin-bottom:8px">如果她说：「${rich(b.if_they_say)}」</div>
+          <div class="label">那说明什么</div><div style="margin-top:4px">${rich(b.what_it_means)}</div>
+          <div style="margin-top:10px;padding:var(--sp-3);border-radius:var(--r-sm);
+            background:var(--good-bg);border:1px solid var(--good-line)">
+            <div class="label" style="color:var(--good-fg)">你就这么回</div>
+            <div style="margin-top:6px;font-size:var(--fs-md)">${rich(b.you_say)}</div></div>
+          ${b.watch_out ? `<div class="hint" style="margin-top:8px">这里的坑：${rich(b.watch_out)}</div>` : ''}
+        </div>`).join('')}
     </div>` : ''}
     ${(res.options || []).length ? `<div class="card">
       <h3>真要开口，可以往哪个方向</h3>
@@ -2080,6 +2169,13 @@ const REPLAY_Q_SYSTEM = `用户在复盘一段真实聊天记录。你的任务*
 const REPLAY_REVEAL_SYSTEM = `用户已经先自己答过一遍了，现在给他完整分析。顺序很重要：
 先确认他答对/答错的地方，再给解读，最后才给可选的回应方向。
 
+用户明确要求过这段输出要包含三件事：**把情况分析清楚**、**我该怎么回**、
+**如果对面下一步这么说，我该怎么回**。所以下面的 how_to_reply 和 branches 是必给的，
+不能省——他要的就是"现在能用的东西"，不是一份点评。
+
+给回应时要守住这个 App 的底线：给**方向和一句可参考的说法**，不承诺「照念就有效」。
+人的反应不是脚本能决定的，所以要写清楚"这么回的用意是什么"和"对方如果接不住怎么办"。
+
 输出严格 JSON：
 {
   "score_line": "他判断得怎么样，一句话，具体到哪题",
@@ -2090,10 +2186,25 @@ const REPLAY_REVEAL_SYSTEM = `用户已经先自己答过一遍了，现在给�
      "signals": "支持或反对这个解读的具体线索"}
   ],
   "your_part": [{"quote": "用户的话", "effect": "这句话实际发出了什么信号"}],
+  "how_to_reply": {
+    "situation": "现在这个局面最要紧的是什么，两三句说清（对方处在什么状态、你手上有什么牌）",
+    "say": "可以这么回：给一到两句具体的话，像人说的，不要模板腔",
+    "why": "为什么这么回有效——说清它在回应对方的什么需要",
+    "avoid": "千万别这么回：指出最容易犯的那个错，并说明为什么它会让事情变糟"
+  },
+  "branches": [
+    {"if_they_say": "对方接下来可能说的一类话（给具体的一句示例）",
+     "what_it_means": "如果她这么说，说明什么（诚实地给两三种可能）",
+     "you_say": "那你就这么回（一到两句具体的）",
+     "watch_out": "这里最容易踩的坑"}
+  ],
   "options": [{"move": "承接情绪|核实歧义|回应需要|划清边界", "direction": "原则和方向，不是逐字模板"}],
   "principle": "这次复盘最值得记住的一条通用原理"
 }
-readings 最多 4 条，your_part 最多 3 条，options 最多 3 条。只输出 JSON。`;
+readings 最多 4 条，your_part 最多 3 条，options 最多 3 条。
+branches 给 3-4 条，要覆盖**最可能出现的两三种走向**（含"她冷下去不回"这一种）。
+如果这段记录已经结束、没有下一轮了，branches 就按"下次类似情形"来给。
+只输出 JSON。`;
 
 /* ---- 三次调用。都走 llmCall，所以手机（原生桥）和电脑（代理）同一条路。 ---- */
 
@@ -2147,7 +2258,7 @@ function renderStages() {
         <span class="tag">${dpv.met ? '✓ 已达标' : '还没达标'}</span></div>
       <div class="tbar" style="margin:11px 0 9px"><i style="width:${dpv.pct}%"></i></div>
       <div class="daily-line">
-        今天：${dpv.cards}/${dpv.tg.cards} 张卡片 · ${dpv.lessons}/${dpv.tg.lessons} 条微课
+        今天：${dpv.cards}/${dpv.tg.cards} 张卡片（判对才算） · ${dpv.lessons}/${dpv.tg.lessons} 条微课
         ${dpv.extra ? ` · <b>加练 ${dpv.extra}</b>` : ''}
       </div>
       <div class="row">
@@ -2404,7 +2515,13 @@ function todayWhat(p, cfg) {
   const remL = Math.max(0, p.tg.lessons - p.lessons);
   if (remC) parts.push(`${remC} ${L.cards || '张卡片'}`);
   if (remL) parts.push(`${remL} ${L.lessons || '条微课'}`);
-  return `还差：${parts.join(' + ')}。`;
+  /* 判对才算——这条规则要写在**动手之前**能看到的地方，不能等他答了几张
+     发现数字不动才知道。顺手把「答了几张」也说出来，否则一个不动的数字
+     看起来就是坏了。 */
+  const tail = p.tried > p.cards
+    ? `卡片要判对才算数：今天你答了 ${p.tried} 张，判对 ${p.cards} 张。`
+    : '卡片要判对才算数。';
+  return `还差：${parts.join(' + ')}。${tail}`;
 }
 
 /** 一行任务。pct 到了就打勾并把文字压暗——状态一眼可见，不用算。 */
@@ -2422,7 +2539,7 @@ function nextAction(p) {
   if (p.met) return { label: '加练一会儿', fn: "goPracticeCards()" };
   if (p.cards < p.tg.cards) {
     const rem = p.tg.cards - p.cards;
-    return { label: `开始做卡片（还差 ${rem} 张）`, fn: "closeGate();goPracticeCards()" };
+    return { label: `开始做卡片（还差 ${rem} 张判对）`, fn: "closeGate();goPracticeCards()" };
   }
   const rem = p.tg.lessons - p.lessons;
   return { label: `去看微课（还差 ${rem} 条）`, fn: "closeGate();setPracticeSubview('learn')" };
@@ -2434,16 +2551,18 @@ function rollDaily() {
   const d = state.daily || {};
   if (d.date !== t) {
     // 昨天的结果入档（只有真有活动才记，避免打开一次就留一条空记录）
-    if (d.date && (d.cards || d.lessons || d.extra)) {
+    if (d.date && (d.cards || d.lessons || d.extra || d.tried)) {
       state.dailyLog = state.dailyLog || [];
       state.dailyLog.push({
         date: d.date, cards: d.cards || 0, lessons: d.lessons || 0,
-        extra: d.extra || 0, met: !!d.met, skipped: !!d.skipped, fogPass: !!d.fogPass,
+        extra: d.extra || 0, tried: d.tried || 0,
+        met: !!d.met, skipped: !!d.skipped, fogPass: !!d.fogPass,
       });
       if (state.dailyLog.length > 400) state.dailyLog = state.dailyLog.slice(-400);
     }
     state.daily = {
-      date: t, cards: 0, lessons: 0, extra: 0, skipped: false, met: false, fogPass: false, metAt: null,
+      date: t, cards: 0, lessons: 0, extra: 0, tried: 0,
+      skipped: false, met: false, fogPass: false, metAt: null,
     };
   }
 }
@@ -2459,6 +2578,9 @@ function dailyProgress() {
   return {
     d, tg,
     cards: d.cards || 0, lessons: d.lessons || 0, extra: d.extra || 0,
+    /* tried = 今天答了几张（含没判对的）。达标只看 cards，tried 是给界面
+       说清楚用的：「答了 6 张、判对 3 张」比一个不动的 3/4 诚实得多。 */
+    tried: d.tried || 0,
     done: Math.min(done, need), need,
     pct: need ? Math.min(100, Math.round(done / need * 100)) : 100,
     met: !!d.met,
@@ -2480,12 +2602,38 @@ function markDailyMet() {
   syncGate();
 }
 
-/** 记录一次练习。kind 是 'card' | 'lesson'。达标线之外算加练。 */
-function bumpDaily(kind) {
+/**
+ * 记录一次练习。kind 是 'card' | 'lesson'。达标线之外算加练。
+ *
+ * `counted` 是「这一次判对了没有」。**只有判对的才计入达标。**
+ *
+ * 为什么要有这个参数（2.36 改的，之前是「答了就计数」）：
+ *   原来的写法是 `rate(...); bumpDaily('card')`，无条件加一。后果是
+ *   **连点四张、全错的也达标、也解锁游戏**——护城河形同虚设。
+ *   而这和 App 自己的原则是矛盾的：关卡的通过条件用的是「判局准确率」，
+ *   文档里也写着「做得多不等于判得准，而判准是后面所有动作的前提」。
+ *   同一个 App 两套标准，宽松的那套正好落在最该严的地方（护城河）。
+ *
+ * 判据：读局卡看**读局那一步判对没有**（和关卡同一个标准）；没有读局
+ * 步骤的卡，看动作有没有选到最好的那个。`half`（也算说得通，但不是首选）
+ * 不算——达标要的是判准，不是判得差不多。
+ *
+ * `tried` 无论对错都加一，**只用来在界面上说清楚**（「答了 6 张、判对 3 张」）。
+ * 不记的话，用户看到一个不动的数字只会以为 App 坏了——规则变了就必须说出来，
+ * 这是这个项目一直在守的规矩。
+ */
+function bumpDaily(kind, counted = true) {
   rollDaily();
   const tg = dailyTargets();
   const d = state.daily;
   if (kind === 'card') {
+    d.tried = (d.tried || 0) + 1;
+    if (!counted) {
+      save();
+      syncGate();     // 没判对：推一次状态，但不推进达标
+      renderHeader();
+      return;
+    }
     if ((d.cards || 0) >= tg.cards) d.extra = (d.extra || 0) + 1;
     d.cards = (d.cards || 0) + 1;
   } else if (kind === 'lesson') {
@@ -2548,7 +2696,8 @@ function syncGate() {
       // 那时来不及回调网页问一遍，所以必须提前落盘在原生那边。
       const summary = dp.met
         ? '今天已达标。'
-        : `今天的量很小：还差 ${dp.need - dp.done} 步（${dp.cards}/${dp.tg.cards} 卡片 · ${dp.lessons}/${dp.tg.lessons} 微课）。`;
+        : `今天的量很小：还差 ${dp.need - dp.done} 步（卡片判对 ${dp.cards}/${dp.tg.cards} · 微课 ${dp.lessons}/${dp.tg.lessons}）。`
+          + '卡片要判对才算——点过去不算。';
       EQNative.setGate(arm ? 1 : 0, JSON.stringify(g.packages || []),
         summary, dp.canSkip ? 1 : 0);
     } catch (e) { /* 非 Android 环境，忽略 */ }
@@ -3248,7 +3397,7 @@ function renderSignalIntro() {
       <div class="row" style="margin-top:12px">
         <button class="primary" onclick="startSignalGame()">${plays.length ? '再来一局' : '开始'}</button>
       </div>
-      <p class="hint" style="margin-top:10px">不联网也能玩。<b>不算达标</b>——达标线仍然是 4 张卡片 + 1 条微课；
+      <p class="hint" style="margin-top:10px">不联网也能玩。<b>不算达标</b>——达标线仍然是 4 张卡片（判对）+ 1 条微课；
       但它算今天的活动，所以「今日」和连续天数会照常往上走（和「缓一下」同一条规矩：
       只要是真练了就算，只有达标线卡在卡片和微课上）。</p>
     </div>`;
@@ -3881,7 +4030,11 @@ function musicStop() {
 }
 /** 原生的状态回来。type: picked/playing/stopped/error/cancel/forgot/state */
 function onMusicState(o) {
-  if (!o || typeof o !== 'object') return;
+  /* 原生发过来的是 JSON 字符串，不是对象——这里原来写的是
+     `typeof o !== 'object'` 就 return，于是「选好了」的提示和播放状态
+     更新一次都没生效过，而且完全不报错。见 voice.js 里 bridgeObj 的说明。 */
+  o = bridgeObj(o);
+  if (!o) return;
   V.music = {
     has: !!o.has, name: o.name || '', playing: !!o.playing,
     persist: o.persist !== false,
@@ -4098,6 +4251,7 @@ function renderToday() {
         ${todoRow('卡片', p.cards, p.tg.cards, (cfg.labels || {}).cards || '张卡片', p.met)}
         ${todoRow('微课', p.lessons, p.tg.lessons, (cfg.labels || {}).lessons || '条微课', p.met)}
       </div>
+      ${(!p.met && p.tried > p.cards) ? `<p class="hint" style="margin-top:8px">今天你答了 ${p.tried} 张，其中 <b>判对 ${p.cards} 张</b>。没判对的不算——护城河拦的就是「点过去」。判错了正好，那才是要练的地方。</p>` : ''}
 
       ${p.met ? `<div class="todo-extra">加练 ${p.extra} 次（可选，不达标也不影响）</div>` : ''}
 

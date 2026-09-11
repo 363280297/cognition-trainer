@@ -55,6 +55,7 @@ public class MainActivity extends Activity {
     private static final int REQ_NOTIF = 1002;
     private static final int REQ_STORAGE = 1003;
     private static final int REQ_MUSIC = 1004;     // 选一个音乐文件（ACTION_OPEN_DOCUMENT）
+    private static final int REQ_SHOT = 1005;      // 选聊天截图（ACTION_OPEN_DOCUMENT image/*）
 
     /** 闸门服务把主界面拉起来时带这个 extra */
     public static final String EXTRA_GATE = "gate";
@@ -313,6 +314,102 @@ public class MainActivity extends Activity {
         });
     }
 
+    // ------------------------------------------------ 聊天截图（OCR 的输入）
+
+    private void shotPickImpl() {
+        ui.post(() -> {
+            /* 用 GET_CONTENT 而不是 OPEN_DOCUMENT：
+               OPEN_DOCUMENT 的语义是「长期访问这个文档」，所以它会走一套
+               更重的选择流程；而截图是**用完就扔**的——读完就转成文字，
+               App 不留这份文件，也不需要持久化授权（下面 onActivityResult 里
+               刻意没有 takePersistableUriPermission）。
+               GET_CONTENT 正好是「拿一份内容」这个语义，权限只在这一次有效。 */
+            Intent i = new Intent(Intent.ACTION_GET_CONTENT);
+            i.addCategory(Intent.CATEGORY_OPENABLE);
+            i.setType("image/*");
+            try {
+                startActivityForResult(i, REQ_SHOT);
+            } catch (Exception e) {
+                emitShot(false, "这台手机没有图片选择器", null);
+            }
+        });
+    }
+
+    /**
+     * 把结果回传给网页。**注意这里是 q() 包过的 JSON 字符串**，不是对象字面量：
+     * JSONObject.quote 会做转义，直接注入原文迟早被某个字符搞坏。代价是
+     * 网页那边必须 JSON.parse 一道——于是漏了这一步就会静默失效，
+     * 网页一律走"没数据"的分支。见 voice.js 的 bridgeObj()。 */
+    private void emitShot(boolean ok, String why, String dataUrl) {
+        JSONObject o = new JSONObject();
+        try {
+            o.put("ok", ok);
+            if (ok) o.put("dataUrl", dataUrl); else o.put("why", why);
+        } catch (Exception ignored) { }
+        js("window.__onShot&&window.__onShot(" + q(o.toString()) + ")");
+    }
+
+    /**
+     * 把选中的图读成 dataURL，顺便**降采样**。
+     *
+     * 为什么要在原生这边降，而不是把原图丢给网页：
+     *   一张手机截图的 PNG 通常一两 MB，base64 之后还要再涨三分之一。
+     *   那个字符串要先过 JS 桥、再进 JSON、再 POST 出去——白白多搬两趟。
+     *   而且模型那边反正会把图缩到「约 800×800」的量级，原图的分辨率本来就浪费掉了。
+     *
+     * 用 inSampleSize 先粗降（它只读必要的像素，不整张解码，几 MB 的图也不会 OOM），
+     * 再用 createScaledBitmap 精修到目标尺寸。全程只用框架自带的 BitmapFactory，
+     * **不引入任何原生库**——build_apk.py 里那条「包里一个 lib/ 都不能有」的断言
+     * 还得成立。
+     */
+    private String shotToDataUrl(Uri u, int maxSide) throws Exception {
+        android.graphics.BitmapFactory.Options bounds = new android.graphics.BitmapFactory.Options();
+        bounds.inJustDecodeBounds = true;
+        InputStream in1 = getContentResolver().openInputStream(u);
+        android.graphics.BitmapFactory.decodeStream(in1, null, bounds);
+        if (in1 != null) in1.close();
+        int w0 = bounds.outWidth, h0 = bounds.outHeight;
+        if (w0 <= 0 || h0 <= 0) throw new Exception("这张图读不出尺寸（可能不是常见图片格式）");
+
+        int want = Math.max(w0, h0) > maxSide ? maxSide : Math.max(w0, h0);
+        android.graphics.BitmapFactory.Options opt = new android.graphics.BitmapFactory.Options();
+        int sample = 1;
+        while (Math.max(w0, h0) / (sample * 2) >= want) sample *= 2;
+        opt.inSampleSize = sample;
+        opt.inPreferredConfig = android.graphics.Bitmap.Config.ARGB_8888;
+        InputStream in2 = getContentResolver().openInputStream(u);
+        android.graphics.Bitmap bm = android.graphics.BitmapFactory.decodeStream(in2, null, opt);
+        if (in2 != null) in2.close();
+        if (bm == null) throw new Exception("这张图解不开");
+
+        // 精修到目标尺寸（inSampleSize 只能按 2 的幂降，可能还偏大）
+        int mw = Math.max(bm.getWidth(), bm.getHeight());
+        if (mw > maxSide) {
+            float k = (float) maxSide / mw;
+            android.graphics.Bitmap small = android.graphics.Bitmap.createScaledBitmap(
+                    bm, Math.max(1, Math.round(bm.getWidth() * k)),
+                    Math.max(1, Math.round(bm.getHeight() * k)), true);
+            if (small != bm) bm.recycle();
+            bm = small;
+        }
+
+        /* 铺一层白底再压 JPEG：截图有的带透明通道，直接压 JPEG 会把透明
+           变成黑色，白底黑字就反过来了，OCR 直接废掉。 */
+        android.graphics.Bitmap flat = android.graphics.Bitmap.createBitmap(
+                bm.getWidth(), bm.getHeight(), android.graphics.Bitmap.Config.ARGB_8888);
+        android.graphics.Canvas cv = new android.graphics.Canvas(flat);
+        cv.drawColor(android.graphics.Color.WHITE);
+        cv.drawBitmap(bm, 0, 0, null);
+        bm.recycle();
+
+        java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+        flat.compress(android.graphics.Bitmap.CompressFormat.JPEG, 82, bos);
+        flat.recycle();
+        byte[] bytes = bos.toByteArray();
+        String b64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP);
+        return "data:image/jpeg;base64," + b64;
+    }
+
     /** 文件在文件管理器里显示的名字。列表里想让用户认出自己选的是哪首。 */
     private String displayName(Uri u) {
         Cursor c = null;
@@ -397,6 +494,7 @@ public class MainActivity extends Activity {
                 o.put("tts", ttsReady);
                 o.put("http", true);
                 o.put("music", true);      // 有 MediaPlayer 就一定能放自己选的文件
+                o.put("shot", true);       // 有 BitmapFactory 就一定能读自己选的图
             } catch (Exception ignored) { }
             return o.toString();
         }
@@ -777,6 +875,8 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public void musicPick() { musicPickImpl(); }
+        @JavascriptInterface
+        public void shotPick() { shotPickImpl(); }
 
         @JavascriptInterface
         public void musicPlay() { musicPlayImpl(); }
@@ -840,6 +940,39 @@ public class MainActivity extends Activity {
             Prefs.setMusic(this, u.toString(), displayName(u));
             emitMusic("picked", displayName(u));
             musicPlayImpl();               // 选完直接放，不然用户还要再点一下
+            return;
+        }
+
+        if (code == REQ_SHOT) {
+            /* 三种失败分开报，别都写成一句「没选到图片」。
+               一句笼统的话在真机上排查不了：到底是用户真的取消了、
+               选择器没给数据、还是给了个空地址？这三件事的下一步完全不同。
+               （第一次实现就是笼统的一句话，结果连自己在哪一步失败都看不出来。） */
+            if (result != RESULT_OK) {
+                emitShot(false, "在选择器里取消了", null);
+                return;
+            }
+            if (data == null) {
+                emitShot(false, "选择器没有返回任何数据", null);
+                return;
+            }
+            final Uri u = data.getData();
+            if (u == null) {
+                emitShot(false, "选择器返回了一个空地址（可能是这个图片选择器不兼容）", null);
+                return;
+            }
+            /* 读图 + 编码放到后台线程：一张几 MB 的图解码要几百毫秒，
+               在主线程做会让界面卡一下（用户的感觉是"点了没反应"）。
+               这里的授权不用持久化——截图是**这一次**要用的东西，
+               不该让这个 App 长期握着你相册里某张图的读取权。 */
+            new Thread(() -> {
+                try {
+                    String dataUrl = shotToDataUrl(u, 1400);
+                    emitShot(true, null, dataUrl);
+                } catch (Throwable t) {
+                    emitShot(false, "读图失败：" + t.getMessage(), null);
+                }
+            }).start();
             return;
         }
     }

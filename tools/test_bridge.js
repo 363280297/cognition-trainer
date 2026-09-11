@@ -181,6 +181,93 @@ t('原生回调的每个 window.__onX，网页都真的定义了处理函数',
   noHandler.length === 0,
   noHandler.length ? `没人接：${noHandler.join(', ')}` : `${[...callbacks].sort().join(', ')} 都对得上`);
 
+/* ---------- 8.5) 带数据的回调：网页必须把 JSON 字符串解出来 ----------
+ *
+ * 原生是这样发的：js("window.__onX&&window.__onX(" + q(json) + ")")。
+ * q() 是 JSONObject.quote，它把 JSON **包成 JS 字符串字面量**，
+ * 所以网页收到的 typeof 是 'string'，不是对象。
+ *
+ * 漏了解 JSON 的后果是**静默的**：不抛异常、不打日志，处理函数读到
+ * payload.ok === undefined，于是每次都走「不成立」的兜底分支。
+ * 这个坑真的踩到了，而且一次踩出两处：
+ *   · __onShot：真机上一按就提示「没识别成功：没选到图片」，而原生日志
+ *     明明是 emit ok=true len=43195——图读出来了、base64 也送到了。
+ *     在模拟器上排查了很久（怀疑权限、怀疑选择器、怀疑桥），
+ *     最后是把 typeof payload 临时打到界面上才看见是 'string'。
+ *   · __onMusic：处理函数开头就是 `typeof o !== 'object'` 直接 return，
+ *     于是「选好了」的提示和播放状态更新从来没生效过。
+ *
+ * 所以这条静态断言盯住两类：
+ *   a) 用 q() 发 JSON 的回调 → 处理函数里必须出现 bridgeObj( 或 JSON.parse(
+ *   b) 反向：处理函数里如果写了 `typeof ... !== 'object'` 这种"只认对象"的
+ *      守卫，也判失败——那正是漏解 JSON 的写法。
+ * 动态那一半在 tools/check_replay_shot.js 第六节（按真实形状真调一遍）。
+ */
+const payloadCallbacks = new Set();
+// 逐行找：原生的写法是 js("window.__onX&&window.__onX(" + q(json) + ")")，
+// 中间隔着字符串拼接，所以不能用一条"紧邻"的正则——第一版就写成了
+// window.__onX\(\s*q\(，结果一个都没扫到，检查变成空转（还打印了 PASS）。
+for (const line of java.split(/\r?\n/)) {
+  if (!/window\.__on\w+/.test(line) || !/q\(/.test(line)) continue;
+  const m = line.match(/window\.(__on\w+)/);
+  if (m) payloadCallbacks.add(m[1]);
+}
+
+/* 扫之前先剥注释。
+ *
+ * 这条在 Java 那边已经踩过三次（@JavascriptInterface、setPackagesSuspended、
+ * 写脚本那三条都是"注释里正好写着这个坏写法"）。我这次又踩了第四次：
+ * bridgeObj 的说明注释里引用了 `typeof o !== 'object'` 这个坏模式，
+ * 于是下面第二条断言把自己的说明文字当成了违规代码。
+ *
+ * JS 的行注释不能像 Java 那样无脑删——`'https://api.deepseek.com'` 里的
+ * `//` 会把整行截断。所以这里只删**整行注释**和块注释。 */
+const stripJsComments = (s) => s
+  .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
+  .split(/\r?\n/)
+  .map((l) => (/^\s*\/\//.test(l) ? '' : l))
+  .join('\n');
+const jsSrcAll = stripJsComments(
+  jsFiles.map((f) => fs.readFileSync(path.join(ROOT, f), 'utf8')).join('\n'));
+
+/** 取一个回调整处理函数的源码：支持 `window.__onX = function (){}` 和
+ *  `window.__onX = someName;` 两种写法（__onMusic 就是后者，
+ *  第一版因此把它的 bridgeObj 判成"没解 JSON"）。 */
+function handlerBody(name) {
+  const at = jsSrcAll.indexOf(`window.${name} =`);
+  if (at < 0) return null;
+  const head = jsSrcAll.slice(at, at + 80);
+  const alias = head.match(/window\.__on\w+\s*=\s*(\w+)\s*;/);
+  if (alias) {
+    const fnAt = jsSrcAll.search(new RegExp(`function\\s+${alias[1]}\\s*\\(`));
+    if (fnAt >= 0) {
+      const stop = jsSrcAll.indexOf('\n}', fnAt);
+      return jsSrcAll.slice(fnAt, stop > 0 ? stop + 2 : fnAt + 1500);
+    }
+    return null;
+  }
+  const nextAt = jsSrcAll.indexOf('window.__on', at + 10);
+  return jsSrcAll.slice(at, nextAt > 0 && nextAt - at < 1500 ? nextAt : at + 1500);
+}
+
+const notParsed = [];
+const objectOnlyGuard = [];
+for (const cb of payloadCallbacks) {
+  const body = handlerBody(cb);
+  if (!body) { notParsed.push(`${cb}(找不到处理函数)`); continue; }
+  if (!/bridgeObj\(|JSON\.parse\(/.test(body)) notParsed.push(cb);
+  if (/typeof\s+\w+\s*!==\s*'object'/.test(body)) objectOnlyGuard.push(cb);
+}
+t('用 q() 发 JSON 的回调，网页都把字符串解出来了（否则静默失效）',
+  notParsed.length === 0,
+  notParsed.length
+    ? `${notParsed.join(', ')}  ← 加 bridgeObj(payload)，见 voice.js`
+    : `已检查：${[...payloadCallbacks].sort().join(', ')}`);
+t('没有「只认对象」的守卫（typeof x !== \'object\' 就是漏解 JSON 的写法）',
+  objectOnlyGuard.length === 0,
+  objectOnlyGuard.length ? `${objectOnlyGuard.join(', ')}  ← 改成 bridgeObj(x)` : '无');
+if (payloadCallbacks.size === 0) console.log('  （没扫到用 q() 发 JSON 的回调，检查范围可能失效）');
+
 
 /* ---------- 9) 不可残留：卸载之后必须什么都不剩 ----------
  *

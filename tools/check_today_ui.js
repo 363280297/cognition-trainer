@@ -156,6 +156,116 @@ const read = (p) => p.evaluate(() => {
   chk('边界里没有露出的 **', rv.text.indexOf('**') < 0);
   chk('界面上再也不出现「今日复盘」四个字', !rv.stale);
 
+  /* ------------------------------------------------------------------
+     达标必须「判对」——这一节走**真实的 answerCard / bumpDaily**，
+     不是复刻一份判定逻辑。
+
+     为什么要专门写这一节：原来的代码是 `rate(...); bumpDaily('card')`，
+     无条件加一，于是**连点四张、全错的也达标、也解锁游戏**，护城河形同虚设。
+     更值得记的是它为什么一直没被发现——`tools/test_daily.js` 里那些
+     「做满卡片 → 达标」的断言是**复刻**了一份判定逻辑来测的，
+     所以它测的是「我以为的规则」；真实代码里那个无条件加一的 `bumpDaily('card')`，
+     复刻的那份永远看不见。**测副本不等于测代码。**
+     所以这里让卡片真的被答一遍，再看 state.daily 动没动。
+     ------------------------------------------------------------------ */
+  console.log('\n[达标要判对：真的答一张，看计数动没动]');
+
+  const dailyStep = async (mode) => {
+    const p = await b.newPage({ viewport: { width: 420, height: 900 } });
+    p.on('pageerror', (e) => errs.push(String(e)));
+    await p.goto(OFFLINE, { waitUntil: 'load' });
+    await p.waitForFunction('document.getElementById("view") && document.getElementById("view").children.length > 0');
+    await p.evaluate((m) => {
+      document.querySelectorAll('.sheet, .gate').forEach((s) => s.remove());
+      // 今日进度清零、闸门武装，然后用**真实的渲染和处理器**答一张卡
+      state.daily = {
+        date: todayStr(), cards: 0, lessons: 0, extra: 0, tried: 0,
+        skipped: false, met: false, fogPass: false, metAt: null,
+      };
+      state.gate = Object.assign({}, state.gate, { enabled: true, packages: ['com.example.game'] });
+      const cards = CONTENT.cards.cards;
+      const card = (m === 'genreBad' || m === 'genreOk')
+        ? cards.find((c) => c.genre)          // 有读局步骤的卡
+        : cards.find((c) => !c.genre);        // 没有读局步骤的卡
+      session.queue = [card];
+      session.i = 0;
+      session.lowLoad = false;
+      go('practice');
+      renderCard();
+    }, mode);
+    const info = await p.evaluate(() => {
+      const card = session.queue[session.i];
+      const btns = [...document.querySelectorAll('#genreStep .genre-btn')].map((b) => b.dataset.g);
+      const right = [card.genre].concat(card.genreAlt || []);
+      return {
+        id: card.id, right, btns,
+        wrong: btns.filter((g) => !right.includes(g)),
+        best: card.best,
+        notBest: (card.options.find((o) => o.id !== card.best) || {}).id,
+      };
+    });
+    // 第一步：读局（只有 genre 卡有）
+    if (info.btns.length) {
+      const okGenre = mode === 'genreOk';
+      await p.click(`#genreStep .genre-btn[data-g="${okGenre ? info.right[0] : info.wrong[0]}"]`);
+    }
+    // 第二步：选动作。验「读局判错」时动作选**对**的，
+    // 这样「没达标」只可能来自读局判错，不会和动作选错混在一起。
+    const action = mode === 'actionWrong' ? info.notBest : info.best;
+    await p.click(`#opts .opt[data-id="${action}"]`);
+    await p.waitForTimeout(250);
+    const after = await p.evaluate(() => ({
+      cards: state.daily.cards, tried: state.daily.tried, met: state.daily.met,
+      armed: !!(state.gate && state.gate.armed),
+      feedback: (document.querySelector('#fb h3') || {}).textContent || '',
+    }));
+    await p.close();
+    return { info, after };
+  };
+
+  const gBad = await dailyStep('genreBad');
+  chk('读局判错 → 不计入达标（这就是原来那个洞）',
+    gBad.after.cards === 0 && gBad.after.tried === 1,
+    `${gBad.info.id}：cards=${gBad.after.cards} tried=${gBad.after.tried}（期望 0 / 1）`);
+  chk('读局判错时闸门仍然武装（游戏还是进不去）', gBad.after.armed === true);
+  chk('读局判错时不会误判成达标', gBad.after.met === false);
+
+  const gOk = await dailyStep('genreOk');
+  chk('读局判对 → 计入达标',
+    gOk.after.cards === 1 && gOk.after.tried === 1,
+    `${gOk.info.id}：cards=${gOk.after.cards} tried=${gOk.after.tried}（期望 1 / 1）`);
+
+  const aBad = await dailyStep('actionWrong');
+  chk('没有读局步骤的卡：动作选错 → 不计入达标',
+    aBad.after.cards === 0 && aBad.after.tried === 1,
+    `${aBad.info.id}：cards=${aBad.after.cards} tried=${aBad.after.tried}（期望 0 / 1）`);
+
+  const aOk = await dailyStep('actionOk');
+  chk('没有读局步骤的卡：动作选对 → 计入达标',
+    aOk.after.cards === 1 && aOk.after.tried === 1,
+    `${aOk.info.id}：cards=${aOk.after.cards} tried=${aOk.after.tried}（期望 1 / 1）`);
+
+  // 规则必须写在界面上，不能悄悄改（这个项目的硬规矩）
+  const said = await (async () => {
+    const p = await b.newPage({ viewport: { width: 420, height: 900 } });
+    await p.goto(OFFLINE, { waitUntil: 'load' });
+    await p.waitForFunction('document.getElementById("view") && document.getElementById("view").children.length > 0');
+    const r = await p.evaluate(() => {
+      document.querySelectorAll('.sheet, .gate').forEach((s) => s.remove());
+      state.daily = {
+        date: todayStr(), cards: 0, lessons: 0, extra: 0, tried: 3,
+        skipped: false, met: false, fogPass: false, metAt: null,
+      };
+      go('today');
+      return document.querySelector('.today-card').textContent.replace(/\s+/g, ' ');
+    });
+    await p.close();
+    return r;
+  })();
+  chk('界面上写明了「卡片要判对才算数」', /判对才算/.test(said));
+  chk('界面上写出了「答了 3 张」（否则不动的数字看起来像坏了）',
+    /答了 3 张/.test(said), said.slice(0, 120));
+
   chk('无脚本报错', errs.length === 0, errs.join(' | ') || '无');
   await b.close();
   console.log(`\n结果：${fail ? fail + ' 项失败' : '全部通过'}`);

@@ -77,6 +77,53 @@ for d in ("gen", "obj", "dex"):
 # ------------------------------------------------------- 0 同步网页内容
 if not OFFLINE_HTML.exists():
     sys.exit(f"!! 找不到 {OFFLINE_HTML}\n   先跑 `py -3 build_offline.py` 再构建 APK。")
+
+# 网页那一半的源码改了、离线版 HTML 没重生成 —— 这里必须拦住。
+#
+# 为什么：这个脚本只**拷贝**离线版 HTML，它自己不会重新生成。所以改了
+# public/*.js 之后直接构建，会打出一个「原生是新的、网页是旧的」的包，
+# 而构建日志一切正常（体积、权限、条目全对）。这个坑真的踩到了：
+# 在 __onShot 里加的一行调试输出根本没进包，却在模拟器上排查了半天
+# 「为什么提示语不对」——因为跑的是上一个版本的 JS。
+#
+# 判据用的是 build_offline.py 写下的同一个指纹（输入文件的名字+字节），
+# 它原本只有 verify_offline.js 在读；但那时已经构建完了，太晚。
+_SRC_STAMP = OFFLINE_HTML.parent / "认知训练-离线版.src.txt"
+
+
+def _stamp_hash():
+    """重算 build_offline.py 那个指纹。返回 (算出来的, 记下来的)。"""
+    import hashlib
+    if not _SRC_STAMP.exists():
+        return None, None
+    lines = [l.strip() for l in _SRC_STAMP.read_text(encoding="utf-8").splitlines() if l.strip()]
+    if len(lines) < 3:
+        return None, None
+    want = lines[0]
+    h = hashlib.sha256()
+    for rel in lines[2:]:
+        p = OFFLINE_HTML.parent / rel
+        if not p.exists():
+            return None, want
+        # 用 basename：build_offline.py 那边 update 的就是 _p.name
+        h.update(p.name.encode("utf-8"))
+        h.update(p.read_bytes())
+    return h.hexdigest(), want
+
+
+_got, _want = _stamp_hash()
+if _got is None or _want is None:
+    print("\n⚠ 读不出离线版的输入指纹（缺 认知训练-离线版.src.txt），"
+          "没法证明这份 HTML 是最新的。先跑 py -3 build_offline.py。")
+elif _got != _want:
+    sys.exit(
+        "!! 离线版 HTML 已经过期：public/ 或 data/ 里的源码改过了，但没重新生成。\n"
+        f"   记下来的指纹 {_want[:16]}… / 现在算出来 {_got[:16]}…\n"
+        "   直接构建会打出一个「原生新、网页旧」的包。\n"
+        "   先跑 `py -3 build_offline.py` 再构建。")
+else:
+    print(f"\n--- 离线版新鲜度 ---\n指纹一致 {_got[:16]}…")
+
 ASSETS_INDEX.parent.mkdir(parents=True, exist_ok=True)
 shutil.copy(OFFLINE_HTML, ASSETS_INDEX)
 # 清掉 2.30 留在构建树里的那个 42MB 离线识别模型。

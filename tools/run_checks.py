@@ -38,6 +38,9 @@ CHECKS = [
     ("tools/check_ai_modules.js", False, "AI 模块入口都在"),
     ("tools/check_doubao.js", False, "音色/引擎相关"),
     ("tools/check_voice_pack.js", False, "语音包"),
+    ("tools/check_replay_shot.js", False, "复盘传截图（切段/请求形状/失败提示/桥的形状）"),
+    ("tools/audit_content_quality.py", False, "内容库自检（人称/性别、选项自洽、占位符、重复）"),
+    ("tools/audit_innerhtml.py", False, "注入面自检（不可信字符串进 innerHTML）"),
     ("tools/audit_project.js", False, "项目自检（死代码/版本/产物新鲜度/硬约束）"),
 ]
 
@@ -55,12 +58,19 @@ def main():
         if not p.exists():
             results.append((rel, desc, None, "脚本不存在"))
             continue
-        r = subprocess.run(["node", str(p)], cwd=str(ROOT),
+        # 按扩展名选解释器。原来写死 node——加了 python 的检查之后，
+        # 「脚本不存在」会变成莫名其妙的语法错，白白多查一轮。
+        if p.suffix == ".py":
+            # py -3 是 Windows 上唯一可靠的（裸 python 是 2.7）
+            cmd = ["py", "-3", str(p)]
+        else:
+            cmd = ["node", str(p)]
+        r = subprocess.run(cmd, cwd=str(ROOT),
                            capture_output=True, text=True, errors="replace")
         out = (r.stdout or "") + (r.stderr or "")
         tail = ""
         for line in reversed(out.strip().split("\n")):
-            if line.startswith("结果：") or line.startswith("自检："):
+            if line.startswith("结果：") or line.startswith("自检：") or line.startswith("错误 "):
                 tail = line.strip()
                 break
         results.append((rel, desc, r.returncode, tail or out.strip()[-120:]))
