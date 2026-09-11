@@ -40,6 +40,7 @@ CHECKS = [
     ("tools/check_voice_pack.js", False, "语音包"),
     ("tools/check_replay_shot.js", False, "复盘传截图（切段/请求形状/失败提示/桥的形状）"),
     ("tools/check_card_feedback.js", False, "卡片反馈三条路（答对/答错/次优都讲清）"),
+    ("tools/check_lesson_ui.js", False, "微课界面（系列筛选/打开/应用题反馈/记录落盘）"),
     ("tools/check_gate_watch.js", False, "闸门失效要如实说 + 防掉线三态（意图≠事实）"),
     ("tools/check_chat.js", False, "闲聊：你选什么他就怎么回（机制要真的发生）"),
     ("tools/check_token_budget.js", False, "token 开销：前缀共用/不白花第二次钱/体积上限"),

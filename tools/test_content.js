@@ -251,6 +251,22 @@ console.log('\n微课：');
     t('p33 这条边界点了名（Giovanetti / Kross & Ayduk），不是一句「有研究表明」',
       /Giovanetti/.test(w) && /Kross/.test(w));
   }
+
+  /* 「内容判读」系列（j01-j04）存在的理由是**把筛子交给他**，不是再给他一批内容。
+   * 它唯一的失效方式，是以后有人往里加课时按"再多讲一条道理"来写——那样它就从
+   * 筛子退化成了内容，而内容这个东西本来就是他要学会挑的。
+   * 所以钉三条：系列齐全、每课都落在「判据」上、每课都写了自己的适用边界。 */
+  const judge = lessons.filter((l) => l.series === '内容判读');
+  t('内容判读系列四课齐全（j01-j04）',
+    ['j01', 'j02', 'j03', 'j04'].every((id) => judge.some((l) => l.id === id)),
+    judge.map((l) => l.id).join(','));
+  const noCrit = judge.filter((l) => !/判据/.test(l.read + l.warn + l.apply.why));
+  t('每课都落在「判据」上，不是只给结论或台词', judge.length >= 4 && noCrit.length === 0,
+    noCrit.length ? noCrit.map((l) => l.id).join(',') : `${judge.length} 课都点了判据`);
+  const noEdge = judge.filter((l) => !/这一课|这个应用|本应用/.test(l.warn));
+  t('每课都写了自己的适用边界（warn 里要自己提到这一课 / 这个应用）',
+    judge.length >= 4 && noEdge.length === 0,
+    noEdge.length ? noEdge.map((l) => l.id).join(',') : `${judge.length} 课都有`);
 }
 
 console.log('\n阶段与现实任务：');

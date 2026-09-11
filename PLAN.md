@@ -2795,3 +2795,23 @@ AI 陪练模式里的一个玩法：你把**打算说的话**写进去（或者�
 **Android 实现（浮层闸门与桥）**
 - [AccessibilityService：无法阻止应用启动，只能观察 + 叠加](https://developer.android.com/reference/android/accessibilityservice/AccessibilityService)
 - [DevicePolicyManager.setPackagesSuspended：真正让应用打不开的另一条路](https://developer.android.com/reference/android/app/admin/DevicePolicyManager#setPackagesSuspended(android.content.ComponentName,%20java.lang.String%5B%5D,%20boolean))
+
+> **APK 2.44（versionCode 46）**，权限仍 6 个，体积 0.55 MB。回归 **34 项**全绿。
+> 微课 33 → 37：新系列「内容判读」（j01–j04）。
+>
+> 用户要求「上抖音或者小红书找图文，分析哪些高质量，放进应用里」。**两个平台读不到**
+> （小红书只返回导航和页脚），而查到的那个生态主体是模板生意（话术手册 9.9/39.9/99
+> 分层定价、爆款公式、引流变现）——直接搬进来等于把这个应用变成它要对抗的东西。
+> 所以交付物换成了**判据**：四课教他「怎么判断一份内容值不值得信」，他下次自己就能筛。
+> 细节见 README 的 2.44 一节。
+>
+> **这一轮真正花时间的不是内容，是我自己的两个坑，都记在这：**
+> 1. 第一版 builder（`tools/_add_judge.py`）在中文串里混进了 ASCII 双引号，语法就坏了；
+>    我随后用「邻接字符」批量把引号换成「」，结果**把合法的字符串结束定界符也换掉了**——
+>    一次"修复"造成的破坏比原来的错更大。最后是删掉重写成 `tools/add_lessons_judge.py`，
+>    并在里面加了两条写入前自检：**中文字段里不许出现 ASCII 双引号**、
+>    **`why` 里点的选项编号必须和 `answer` 对得上**（`why` 是 1 起、`answer` 是 0 起，
+>    这两个数不一致的话，读者会看到「选项 3」指的却是第 4 个）。
+> 2. 上一轮（2.42）改过的 `tools/ask_gpt_review.py` 里写的是「14 个场景」，
+>    而 2.42 已经把场景加到 17 个——**改内容的时候漏了改一份"描述这份内容"的文件**。
+>    这轮一起修了（README 的课数同理）。
