@@ -184,7 +184,7 @@ const read = (p) => p.evaluate(() => {
       };
       state.gate = Object.assign({}, state.gate, { enabled: true, packages: ['com.example.game'] });
       const cards = CONTENT.cards.cards;
-      const card = (m === 'genreBad' || m === 'genreOk')
+      const card = (m === 'genreBad' || m === 'genreOk' || m === 'clueBad')
         ? cards.find((c) => c.genre)          // 有读局步骤的卡
         : cards.find((c) => !c.genre);        // 没有读局步骤的卡
       session.queue = [card];
@@ -197,20 +197,35 @@ const read = (p) => p.evaluate(() => {
       const card = session.queue[session.i];
       const btns = [...document.querySelectorAll('#genreStep .genre-btn')].map((b) => b.dataset.g);
       const right = [card.genre].concat(card.genreAlt || []);
+      const clues = card.clues || [];
       return {
         id: card.id, right, btns,
         wrong: btns.filter((g) => !right.includes(g)),
         best: card.best,
         notBest: (card.options.find((o) => o.id !== card.best) || {}).id,
+        clueOkIdx: clues.findIndex((x) => x.ok),
+        clueBadIdx: clues.findIndex((x) => !x.ok),
+        clueN: clues.length,
+        // 依据那一步放出来之前，动作选项必须是不可见的
+        optsHiddenBeforeClue:
+          getComputedStyle(document.getElementById('opts')).display === 'none',
       };
     });
     // 第一步：读局（只有 genre 卡有）
     if (info.btns.length) {
-      const okGenre = mode === 'genreOk';
+      const okGenre = mode !== 'genreBad';
       await p.click(`#genreStep .genre-btn[data-g="${okGenre ? info.right[0] : info.wrong[0]}"]`);
     }
-    // 第二步：选动作。验「读局判错」时动作选**对**的，
-    // 这样「没达标」只可能来自读局判错，不会和动作选错混在一起。
+    // 第二步：指依据（2.37 新增的强制步骤）。选了才放出动作选项。
+    let optsHiddenAfterGenre = null;
+    if (info.clueN) {
+      optsHiddenAfterGenre = await p.evaluate(
+        () => getComputedStyle(document.getElementById('opts')).display === 'none');
+      const idx = mode === 'clueBad' ? info.clueBadIdx : info.clueOkIdx;
+      await p.click(`#clueStep .genre-btn[data-c="${idx}"]`);
+    }
+    // 第三步：选动作。验「读局/依据出错」时动作选**对**的，
+    // 这样「没达标」只可能来自前面那两步，不会和动作选错混在一起。
     const action = mode === 'actionWrong' ? info.notBest : info.best;
     await p.click(`#opts .opt[data-id="${action}"]`);
     await p.waitForTimeout(250);
@@ -220,7 +235,7 @@ const read = (p) => p.evaluate(() => {
       feedback: (document.querySelector('#fb h3') || {}).textContent || '',
     }));
     await p.close();
-    return { info, after };
+    return { info, after, optsHiddenAfterGenre };
   };
 
   const gBad = await dailyStep('genreBad');
@@ -234,6 +249,44 @@ const read = (p) => p.evaluate(() => {
   chk('读局判对 → 计入达标',
     gOk.after.cards === 1 && gOk.after.tried === 1,
     `${gOk.info.id}：cards=${gOk.after.cards} tried=${gOk.after.tried}（期望 1 / 1）`);
+
+  /* 「必须选一句依据才算数」（2.37，用户点名要的）
+     治的是他自述的「分不清情况、直接得出结论」：判局之前得先把依据指出来。 */
+  chk('判局放出来时，动作选项还锁着（必须先指依据）',
+    gOk.info.clueN === 0 || gOk.optsHiddenAfterGenre === true,
+    `clueN=${gOk.info.clueN} 判局后选项仍隐藏=${gOk.optsHiddenAfterGenre}`);
+  const gClueBad = await dailyStep('clueBad');
+  chk('局判对但依据找错 → 不算判准，不计入达标',
+    gClueBad.after.cards === 0 && gClueBad.after.tried === 1,
+    `${gClueBad.info.id}：cards=${gClueBad.after.cards} tried=${gClueBad.after.tried}（期望 0 / 1）`);
+  chk('依据没找对时闸门仍然武装', gClueBad.after.armed === true);
+
+  // 反馈里要把「依据对不对」说出来，否则这一步练不到东西
+  const fb = await (async () => {
+    const p = await b.newPage({ viewport: { width: 420, height: 900 } });
+    await p.goto(OFFLINE, { waitUntil: 'load' });
+    await p.waitForFunction('document.getElementById("view") && document.getElementById("view").children.length > 0');
+    await p.evaluate(() => {
+      document.querySelectorAll('.sheet, .gate').forEach((s) => s.remove());
+      const card = CONTENT.cards.cards.find((c) => (c.clues || []).length);
+      session.queue = [card]; session.i = 0; session.lowLoad = false;
+      go('practice'); renderCard();
+      return card.id;
+    });
+    const idx = await p.evaluate(() => (session.queue[session.i].clues || []).findIndex((x) => !x.ok));
+    await p.click(`#genreStep .genre-btn[data-g="${(await p.evaluate(() => session.queue[session.i].genre))}"]`);
+    await p.click(`#clueStep .genre-btn[data-c="${idx}"]`);
+    const best = await p.evaluate(() => session.queue[session.i].best);
+    await p.click(`#opts .opt[data-id="${best}"]`);
+    await p.waitForTimeout(250);
+    const text = await p.evaluate(() => document.querySelector('#fb').textContent.replace(/\s+/g, ' '));
+    await p.close();
+    return text;
+  })();
+  chk('反馈里说了「你指的依据」',
+    /你指的依据/.test(fb), fb.slice(0, 90));
+  chk('依据错了会指出真正站得住的那条', /不是这句话真正的判据|真正能站住/.test(fb));
+  chk('并且解释为什么依据错了不算过（多半是蒙对的）', /蒙对/.test(fb));
 
   const aBad = await dailyStep('actionWrong');
   chk('没有读局步骤的卡：动作选错 → 不计入达标',

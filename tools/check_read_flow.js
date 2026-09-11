@@ -63,33 +63,62 @@ const chk = (l, c, e) => { console.log(`  ${c ? 'PASS' : 'FAIL'}  ${l}${e ? '  �
   chk('八个可点选项都在', gate.buttons.length === 8, gate.buttons.join('/'));
 
   const afterPick = await p.evaluate(() => {
+    const card = CONTENT.cards.cards.find((c) => c.genre);
     const btn = [...document.querySelectorAll('#genreStep .genre-btn')]
-      .find((x) => x.textContent.trim() === CONTENT.cards.cards.find((c) => c.genre).genre);
+      .find((x) => x.textContent.trim() === card.genre);
     btn.click();
     const opts = document.getElementById('opts');
+    const clueStep = document.getElementById('clueStep');
     return {
-      shown: opts.style.display !== 'none',
+      // 2.37 起：判完局**还看不到**动作选项，得先指一句依据
+      optsShownAfterGenre: opts.style.display !== 'none',
+      clueShown: clueStep ? clueStep.style.display !== 'none' : false,
+      clueCount: clueStep ? clueStep.querySelectorAll('.genre-btn').length : 0,
       pick: session.genrePick,
-      marked: !!document.querySelector('.genre-btn.picked'),
-      othersDisabled: [...document.querySelectorAll('.genre-btn')].every((x) => x.disabled),
+      marked: !!document.querySelector('#genreStep .genre-btn.picked'),
+      // 只数判局那一组：.genre-btn 现在也用在「指依据」那一步上，
+      // 用全局选择器会把依据那组的按钮一起算进来（它们这时还没被点，自然没有 disabled）
+      othersDisabled: [...document.querySelectorAll('#genreStep .genre-btn')].every((x) => x.disabled),
     };
   });
-  chk('判完局选项才出现', afterPick.shown);
+  chk('判完局还看不到动作选项（必须先指一句依据）', afterPick.optsShownAfterGenre === false);
+  chk('判完局出现了「指依据」那一步', afterPick.clueShown && afterPick.clueCount >= 3,
+    `依据 ${afterPick.clueCount} 条`);
   chk('判的选择被记住', !!afterPick.pick, afterPick.pick);
   chk('选中的那个被标记、其余全部禁用（不能改）',
     afterPick.marked && afterPick.othersDisabled);
+
+  const afterClue = await p.evaluate(() => {
+    const card = CONTENT.cards.cards.find((c) => c.genre);
+    const i = (card.clues || []).findIndex((x) => x.ok);
+    document.querySelectorAll('#clueStep .genre-btn')[i].click();
+    const opts = document.getElementById('opts');
+    return {
+      shown: opts.style.display !== 'none',
+      pick: session.cluePick,
+      disabled: [...document.querySelectorAll('#clueStep .genre-btn')].every((x) => x.disabled),
+    };
+  });
+  chk('指完依据才放出动作选项', afterClue.shown);
+  chk('依据的选择被记住', typeof afterClue.pick === 'number' && afterClue.pick >= 0,
+    String(afterClue.pick));
+  chk('依据那组选完也全部禁用', afterClue.disabled);
 
   // 判错要记进「误判场合」，且跟动作作答分开记
   const wrongGenre = await p.evaluate(() => {
     const before = biasTotal();
     const card = CONTENT.cards.cards.find((c) => c.genre && c.genre !== '纯闲聊');
-    session.queue = [card]; session.i = 0; session.genrePick = null;
+    session.queue = [card]; session.i = 0; session.genrePick = null; session.cluePick = null;
     renderCard();
     const bad = [...document.querySelectorAll('#genreStep .genre-btn')]
       .find((x) => x.textContent.trim() === '纯闲聊');
     bad.click();
+    // 依据故意指一条**对的**：这样「没达标」只会由判局那一项造成，
+    // 不会和依据指错混在一起（2.37 起依据也要算对）
+    const ci = (card.clues || []).findIndex((x) => x.ok);
+    if (ci >= 0) document.querySelectorAll('#clueStep .genre-btn')[ci].click();
     answerCard(card.best);           // 动作选对，只有判局错了
-    const answers = state.answers.slice(-2);
+    const answers = state.answers.slice(-3);
     return {
       biasGained: biasTotal() - before,
       misjudged: (state.bias['误判场合'] || 0),
@@ -100,9 +129,11 @@ const chk = (l, c, e) => { console.log(`  ${c ? 'PASS' : 'FAIL'}  ${l}${e ? '  �
   });
   chk('判错会记进「误判场合」', wrongGenre.biasGained >= 1 && wrongGenre.misjudged >= 1,
     `+${wrongGenre.biasGained}`);
-  chk('判局和动作分开记（不混成一条）',
-    wrongGenre.ids.includes('误判场合'.length >= 0 ? wrongGenre.ids[0] : '') &&
+  // 2.37 起是三笔：判局 / 依据 / 动作，各记一条（混成一条就分不出他缺哪一半）
+  chk('判局 / 依据 / 动作三笔分开记（不混成一条）',
     wrongGenre.ids.some((i) => i.endsWith('#genre')) &&
+    wrongGenre.ids.some((i) => i.endsWith('#clue')) &&
+    wrongGenre.ids.some((i) => !i.includes('#')),
     wrongGenre.ids.some((i) => !i.endsWith('#genre')),
     wrongGenre.ids.join(' , '));
   chk('反馈里给出「你判的局 vs 这局其实是」', /这局其实是/.test(wrongGenre.verdict),

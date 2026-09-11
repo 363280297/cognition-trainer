@@ -96,6 +96,56 @@ def check_cards():
         if c.get('genreAlt') and not c.get('genre'):
             bad('cards.json', f'{cid} 有 genreAlt 却没有 genre')
 
+    # 「读局卡」和「有读局步骤」必须是同一件事。
+    #
+    # 这条不变量是补 r05 时才想清楚的：README 写着 84 张里「12 张『读局』」，
+    # `type='read'` 的也正好是 12 张，但**只有 11 张有 `genre`**——缺的那张 r05
+    # 的 `state` 明明白白在讲局（「这局已经落地了……球落在地上的信号」），
+    # `err` 标签也全是「该停不停 / 消极解读 / 投射」。它却因此少了「这是什么局」
+    # 那一步，也就不会走 2.37 新增的「必须指一句依据」，达标判定还从
+    # 「读局判对」掉到「动作选对」——**同一份卡库两套标准**，而界面上不报错。
+    #
+    # 这和 s7/s8 那个人称 bug 是同一类：**该有的东西悄悄没有生效**。
+    # 所以钉住这条不变量——它比逐张读内容便宜得多，而且正是这一类错误的样子。
+    for c in cards:
+        cid = c['id']
+        if c.get('type') == 'read' and not c.get('genre'):
+            bad('cards.json', f'{cid} 是读局卡（type=read）却没有 genre——'
+                              f'「这是什么局」和「必须指一句依据」这两步都会悄悄没有')
+        if c.get('genre') and c.get('type') != 'read':
+            warn('cards.json', f'{cid} 有 genre 但 type={c.get("type")!r}，'
+                               f'读局卡的 type 应该统一是 read')
+
+    # 「必须选一句依据才算数」（2.37）——`clues` 这一步的数据校验。
+    # 这一步是**强制**的：不指依据就看不到动作选项。所以缺了就等于那张卡
+    # 悄悄跳过了这一步（用户要的东西没生效），而界面上不会有任何报错。
+    for c in cards:
+        cid = c['id']
+        clues = c.get('clues')
+        if not clues:
+            if c.get('genre'):
+                bad('cards.json', f'{cid} 有读局步骤却没有 clues——'
+                                  f'「必须选一句依据才算数」在这张卡上不会生效')
+            continue
+        if not c.get('genre'):
+            bad('cards.json', f'{cid} 有 clues 却没有 genre——'
+                              f'判局那一步不存在，依据这一步就没意义')
+        if not (3 <= len(clues) <= 5):
+            bad('cards.json', f'{cid} 的依据有 {len(clues)} 条（要 3~5 条）')
+        ok_n = sum(1 for x in clues if x.get('ok'))
+        if not (1 <= ok_n <= 2):
+            bad('cards.json', f'{cid} 的正确依据有 {ok_n} 条（要 1~2 条）')
+        texts = [str(x.get('text') or '') for x in clues]
+        if any(not t.strip() for t in texts):
+            bad('cards.json', f'{cid} 有空的依据文本')
+        if len(set(texts)) != len(texts):
+            bad('cards.json', f'{cid} 的依据有重复')
+        # 依据不能和动作选项撞句子（撞了就像在提前泄题，读起来也怪）
+        opt_texts = {str(o.get('text') or '') for o in (c.get('options') or [])}
+        same = [t for t in texts if t in opt_texts]
+        if same:
+            bad('cards.json', f'{cid} 的依据和动作选项文本一样：{same[:1]}')
+
     # 关于 card.stage：这里**故意不**拿它去比 stages.json。
     # 第一版比了，报出 84 条「stage 在 stages.json 里找不到」——全是误报：
     # 两个 stage 是两个概念。cards 里的是**关系阶段**（陌生初见/认识试探/熟络/

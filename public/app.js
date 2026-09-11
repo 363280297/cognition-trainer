@@ -80,7 +80,7 @@ const DEFAULT_STATE = {
 let state = load();
 let CONTENT = { cards: { cards: [] }, calibration: { phrases: [] }, curriculum: { lessons: [] }, recovery: { modes: [] }, scenarios: { scenarios: [] }, stages: { stages: [] } };
 let aiReady = false;
-let session = { queue: [], i: 0, lowLoad: false };
+let session = { queue: [], i: 0, lowLoad: false, genrePick: null, cluePick: null };
 let replay = { chat: '', background: '', questions: [], answers: [], reveal: null };
 let currentTab = 'cards';
 let cardTimer = null;
@@ -691,7 +691,7 @@ function domainBar() {
 
 function setDomain(d) {
   cardDomain = d;
-  session = { queue: buildQueue(), i: 0, lowLoad: false };
+  session = { queue: buildQueue(), i: 0, lowLoad: false, genrePick: null, cluePick: null };
   renderCard();
 }
 
@@ -802,7 +802,7 @@ function dropPlan(id) {
 function showPlanSource(cardId) {
   const i = CONTENT.cards.cards.findIndex((c) => c.id === cardId);
   if (i < 0) return;
-  session = { queue: [CONTENT.cards.cards[i]], i: 0, lowLoad: true };
+  session = { queue: [CONTENT.cards.cards[i]], i: 0, lowLoad: true, genrePick: null, cluePick: null };
   cardsView = 'drill';
   renderCard();
 }
@@ -878,7 +878,7 @@ function viewCards() {
    */
   if (cardsView === 'plans') { renderPlans(); return; }
   if (cardsView === 'bias') { renderBias(); return; }
-  if (!session.queue.length) session = { queue: buildQueue(), i: 0, lowLoad: false };
+  if (!session.queue.length) session = { queue: buildQueue(), i: 0, lowLoad: false, genrePick: null, cluePick: null };
   renderCard();
 }
 
@@ -937,7 +937,18 @@ function renderCard() {
         <p class="hint">这一步是刻意挡在前面的。跳过它，下面四个选项都会变得含糊——
         现实里也正是跳过它的时候最容易答非所问。</p>
       </div>` : ''}
-      <div class="opts" id="opts"${card.genre ? ' style="display:none"' : ''}>
+      ${(card.clues && card.clues.length) ? `
+      <div class="genre-step" id="clueStep" style="display:none">
+        <div class="label">你凭哪一句这么判？</div>
+        <div class="genre-grid">
+          ${card.clues.map((x, i) => `<button class="genre-btn" data-c="${i}"
+            onclick="pickClue(this)">${rich(x.text)}</button>`).join('')}
+        </div>
+        <p class="hint">必须指一条依据才往下走。用户自己的话是「必须选一句依据才算数」——
+        这一步治的是<b>跳过证据直接贴标签</b>：局判对了但依据找错，多半是蒙对的，
+        下一次换个场景就不成立了。所以这一步和判局一样要算对。</p>
+      </div>` : ''}
+      <div class="opts" id="opts"${(card.genre || (card.clues || []).length) ? ' style="display:none"' : ''}>
         ${card.options.map((o) => `
           <button class="opt" data-id="${o.id}" onclick="answerCard('${o.id}')">
             <span class="k">${o.id}</span>${rich(o.text)}
@@ -1013,23 +1024,53 @@ function exitReadOnly() {
   renderCard();
 }
 
-/** 读局卡的第一步：判局。选完才放出动作选项。 */
+/** 读局卡的第一步：判局。选完才放出「找依据」那一步。 */
 function pickGenre(btn) {
   const card = session.queue[session.i];
   if (!card || !card.genre) return;
   const picked = btn.dataset.g;
   session.genrePick = picked;
+  session.cluePick = null;      // 换了一张卡/重判一次，依据要重新指
   document.querySelectorAll('#genreStep .genre-btn').forEach((b) => {
     b.disabled = true;
     b.classList.toggle('picked', b === btn);
   });
   const step = document.getElementById('genreStep');
   if (step) step.classList.add('done');
+  // 有依据这一步就先把依据放出来；没有的话（老卡）直接放动作选项。
+  const clue = document.getElementById('clueStep');
   const opts = document.getElementById('opts');
+  if (clue) {
+    clue.style.display = '';
+    // 标出他判的局，好在反馈里跟正确的对比（不在这一步给对错，避免泄题给动作选项）
+    const slot = document.getElementById('genrePickSlot');
+    if (slot) slot.textContent = picked;
+    return;
+  }
   if (opts) opts.style.display = '';
-  // 标出他判的局，好在反馈里跟正确的对比（不在这一步给对错，避免泄题给动作选项）
   const slot = document.getElementById('genrePickSlot');
   if (slot) slot.textContent = picked;
+}
+
+/** 第二步：指一条依据。指完才放出动作选项。
+ *
+ *  用户的原话是「必须选一句依据才算数」——治的是他自述的「分不清情况、
+ *  直接得出结论」。所以这一步是**强制**的：不指依据就看不到动作选项。
+ *  而且它和判局一样**要算对**（见 answerCard 里的 counted），
+ *  否则「局蒙对了但依据是错的」也会算过——那正是这一步想拦的东西。 */
+function pickClue(btn) {
+  const card = session.queue[session.i];
+  if (!card || !(card.clues || []).length) return;
+  const i = Number(btn.dataset.c);
+  session.cluePick = i;
+  document.querySelectorAll('#clueStep .genre-btn').forEach((b) => {
+    b.disabled = true;
+    b.classList.toggle('picked', b === btn);
+  });
+  const step = document.getElementById('clueStep');
+  if (step) step.classList.add('done');
+  const opts = document.getElementById('opts');
+  if (opts) opts.style.display = '';
 }
 
 function answerCard(chosen) {
@@ -1079,6 +1120,20 @@ function answerCard(chosen) {
     });
     if (state.answers.length > 300) state.answers = state.answers.slice(-300);
   }
+
+  /* 「依据」也单独记一笔。和判局分开记的理由同上：要能看出他缺的是哪一半——
+     是局都判错了，还是局判对了但依据找错了（后者多半是蒙对的）。
+     id 上带 #clue，和 #genre 一样是为了不在纵向比对里被算成两次。 */
+  let clueOk = null;
+  if ((card.clues || []).length) {
+    const idx = (typeof session.cluePick === 'number') ? session.cluePick : -1;
+    clueOk = !!(card.clues[idx] && card.clues[idx].ok);
+    state.answers.push({
+      t: Date.now(), id: card.id + '#clue',
+      err: clueOk ? '正解' : '依据没找对', ok: clueOk,
+    });
+    if (state.answers.length > 300) state.answers = state.answers.slice(-300);
+  }
   // 逐次留档，阶段评估的纵向比对要用。只留最近 300 次：要的是趋势，不是档案。
   state.answers.push({ t: Date.now(), id: card.id, err: (ok || half) ? '正解' : (picked.err || '正解'), ok: !!ok });
   if (state.answers.length > 300) state.answers = state.answers.slice(-300);
@@ -1104,6 +1159,15 @@ function answerCard(chosen) {
           ${genreOk ? '✓ 判对了'
             : `✗ 这局其实是：<b>${esc(card.genre)}</b>${
                 (card.genreAlt || []).length ? `（${esc((card.genreAlt || []).join(' 或 '))} 也算）` : ''}`}
+        </div>`}
+        ${clueOk === null ? '' : `<div class="genre-verdict ${clueOk ? 'ok' : 'bad'}">
+          你指的依据：<b>${esc(((card.clues[session.cluePick] || {}).text) || '（没选）')}</b>
+          ${clueOk
+            ? '✓ 这就是那句话露出来的东西'
+            : `✗ 这条读起来像，但它不是这句话真正的判据。真正能站住的是：<b>${
+                esc((card.clues.find((x) => x.ok) || {}).text || '')}</b>`}
+          ${clueOk ? '' : '<br><span class="hint">局判对了但依据找错，多半是蒙对的——换个场景就不成立了。'
+            + '所以这一步和判局一样要算对。</span>'}
         </div>`}
         <div class="diag-why">${rich(card.state)}</div>
       </div>` : ''}
@@ -1166,10 +1230,14 @@ function answerCard(chosen) {
   rate(card.id, ok);
   bump('interpret', ok ? 3 : half ? 1 : 0);
   /* 达标只认「判对」的那一次：
-     · 有读局步骤 → 看读局判对没有（genreOk 在上面算好了，和关卡同一个标准）
-     · 没有读局步骤 → 看动作有没有选到最好的那个（ok）
+     · 有读局步骤 → 看读局判对没有（genreOk）
+     · 有依据步骤 → 依据也得指对（clueOk）——局蒙对、依据是错的，不算判准
+     · 都没有（老卡） → 看动作有没有选到最好的那个（ok）
      half（也算说得通）不算，见 bumpDaily 的说明。 */
-  bumpDaily('card', card.genre ? genreOk === true : ok === true);
+  const counted = card.genre
+    ? (genreOk === true && clueOk !== false)
+    : ok === true;
+  bumpDaily('card', counted);
 }
 
 /* ------------------------------------------------------------ 行动预案
@@ -1261,18 +1329,23 @@ function savePlan(cardId) {
 
 function nextCard() {
   session.i++;
+  // 换卡必须把上一张的选择清掉。原来只 i++，genrePick 会带到下一张——
+  // 以前被「不选就看不到选项」挡住了，加了依据这一步之后同样一个隐患多了一个字段，
+  // 所以在这里显式清一次（靠副作用掩盖状态泄漏，迟早会漏出来）。
+  session.genrePick = null;
+  session.cluePick = null;
   window.scrollTo({ top: 0, behavior: 'smooth' });
   renderCard();
 }
 
 function newSession() {
-  session = { queue: buildQueue(), i: 0, lowLoad: false };
+  session = { queue: buildQueue(), i: 0, lowLoad: false, genrePick: null, cluePick: null };
   wrongStreak = 0;
   renderCard();
 }
 
 function wrongSession() {
-  session = { queue: buildQueue('wrong'), i: 0, lowLoad: false };
+  session = { queue: buildQueue('wrong'), i: 0, lowLoad: false, genrePick: null, cluePick: null };
   wrongStreak = 0;
   renderCard();
 }
