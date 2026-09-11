@@ -45,6 +45,9 @@ const DEFAULT_STATE = {
   // 信号场的成绩。plays 留着看趋势（分辨力有没有在涨），best 按分辨力算——
   // 偏向没有「越高越好」，只有偏多偏少，所以不进 best。
   signal: { plays: [], best: null },
+  // 闲聊「球在谁手里」的成绩。plays 留着看接住率的趋势；byMove 是出手习惯的
+  // 累计分布——它比接住率有用：接住率只说明掉了几个球，byMove 说明**怎么掉的**。
+  chat: { plays: [], byMove: {} },
   // 看过「天花板声明」没有。**这个键原来也是只写不读的**：
   // 界面上写着「建议现在就看一遍，不要等通关」，而 App 其实不知道你看没看。
   // 自检抓出来之后接上了——现在它会决定那句话是「建议看一遍」还是「看过了，随时再看」。
@@ -3800,6 +3803,327 @@ function toggleSignalReview(i) {
   if (el) el.style.display = el.style.display === 'none' ? '' : 'none';
 }
 
+/* ============================================================ 闲聊：球在谁手里
+ *
+ * 用户的要求：「关于内容的方面，要查阅资料，要锻炼我闲聊的能力，加一些案例或者
+ * 说游戏，或者说其他方式你自己决定。」
+ *
+ * 为什么做成一局一局的「接球」，而不是再加一批选择题：
+ *   现有的 84 张卡都是**单发**的——选完就结束，看不见这句话后面会发生什么。
+ *   而用户自己说的毛病是「不想事，直接得出答案」「分不清情况，就胡说」，
+ *   这两句话的病根是同一个：**看不见自己这句话把局面推到了哪里**。
+ *   所以这一局的机制是：你每说一句，对方**下一句就变**。
+ *   选「抢球」他的回应会变短；选「追问」他会接着讲。
+ *   把后果演出来，比再讲一遍道理有用。
+ *
+ * 为什么要先把动作类型藏起来：
+ *   出选项时**不标**这句是「追问」还是「抢球」，选完才揭。
+ *   先标就等于送答案——人一眼看到「追问」就选它，什么也没学到。
+ *   这也是「读局要指依据」那条思路的延续：先做判断，再给名字。
+ *
+ * 内容里的六种动作和四条研究依据都在 data/chat.json 里，改内容不用动这个文件。
+ * 证据的措辞刻意留了边界（含 2025 年那份勘误和一次学术争论），
+ * 因为这个项目里凡是「有证据」的地方都得把证据到哪一步写出来。
+ *
+ * 为什么写在 app.js 而不是新开 public/chat.js：
+ * verify_offline.js 有一条断言钉着「内联了 3 段脚本」。新增一个 .js 文件
+ * 要同时改 index.html 和 build_offline.py 两处清单——这个坑项目里踩过五次了。
+ */
+
+let chatGame = null;
+
+function chatMove(key) {
+  const ms = (CONTENT.chat || {}).moves || [];
+  return ms.find((m) => m.key === key) || { key: key, name: key, what: '', why_good: '' };
+}
+
+/** 闲聊那一屏的总入口。三态：还没开始 / 正在打 / 打完了。 */
+function viewChat() {
+  const d = CONTENT.chat;
+  if (!d || !(d.cases || []).length) {
+    $('#view').innerHTML = `<div class="card"><p class="hint">
+      闲聊内容没加载上（应该来自 data/chat.json）。离线版里这份是内联的，
+      出现这一句说明构建时漏了它。</p></div>`;
+    return;
+  }
+  if (!chatGame) return renderChatIntro();
+  if (chatGame.phase === 'done') return renderChatResult();
+  // 「一案打完、还没进下一案」那一屏也要能被切回来时正确重建，
+  // 否则从别的页切回来会跳回上一步的选项上，看着像回档。
+  if (chatGame.phase === 'ending') return renderChatEnding();
+  return renderChatStep();
+}
+
+function startChatGame() {
+  const d = CONTENT.chat;
+  const all = (d.cases || []).slice();
+  shuffleInPlace(all);
+  const n = Math.min(d.rounds_per_play || 4, all.length);
+  chatGame = {
+    queue: all.slice(0, n), i: 0, step: 0, picked: null, phase: 'step',
+    // picks 是「这一局你说过的每一句」：对方的下一句靠它推（chatAskOf），
+    // 复盘、结局统计也靠它。**第一版把这一项漏了**，于是第一次点击就抛异常——
+    // 是 check_chat.js 抓出来的：它按真实入口建状态，而不是自己手写一个字面量。
+    picks: [],
+    caught: 0, total: 0, byMove: {}, caseKeeps: 0, review: [], recorded: false,
+  };
+  renderChatStep();
+}
+
+function renderChatIntro() {
+  const d = CONTENT.chat;
+  const st = state.chat || { plays: [], byMove: {} };
+  const byMove = st.byMove || {};
+  const played = Object.keys(byMove).reduce((a, k) => a + byMove[k], 0);
+  const worst = played ? Object.keys(byMove).sort((a, b) => byMove[b] - byMove[a])[0] : null;
+  const last = (st.plays || []).length ? st.plays[st.plays.length - 1] : null;
+
+  $('#view').innerHTML = `
+    <div class="card">
+      <h2 class="today-h">球在谁手里</h2>
+      <p class="hint" style="margin-top:8px">
+        闲聊练的不是「会说话」，是<b>接住对方递过来的东西，再递回去</b>。
+        这一局里你说三句话，对方的三句回应会跟着你说的变——<b>你选什么，他就怎么回</b>。
+        所以你能看见「我这句话把局面推到了哪儿」，而不只是被告知哪句更好。
+      </p>
+      <p class="hint" style="margin-top:8px">
+        每局 <b>${d.rounds_per_play || 4} 个场合</b>，一个场合三句。选项上<b>不标</b>动作名字，
+        选完才揭——先看名字再选，等于什么也没练到。
+      </p>
+    </div>
+
+    ${played ? `<div class="card">
+      <div class="meta"><span class="tag dom">你的出手习惯</span>
+        <span class="tag">累计 ${played} 句</span></div>
+      ${worst ? `<p class="hint" style="margin-top:8px">
+        你出手最多的是「<b>${esc(chatMove(worst).name)}</b>」（${byMove[worst]} 次）。
+        ${esc(chatMove(worst).why_good)}
+      </p>` : ''}
+      ${last ? `<p class="hint" style="margin-top:8px">
+        上一局：${last.total} 句里接住了 ${last.caught} 句。
+      </p>` : ''}
+    </div>` : ''}
+
+    <div class="card">
+      <div class="label">六种动作（这一局只用得上这六个）</div>
+      ${(d.moves || []).map((m) => `<div class="chat-move ${m.keep ? 'ok' : 'bad'}">
+        <div class="chat-move-h"><span class="tag ${m.keep ? 'tag-good' : 'tag-bad'}">${esc(m.name)}</span>
+        ${m.keep ? '<span class="tag">球还在</span>' : '<span class="tag">球没了</span>'}</div>
+        <p class="hint">${rich(m.what)}</p>
+        ${m.how ? `<p class="hint"><b>长这样：</b>${rich(m.how)}</p>` : ''}
+        <p class="hint">${rich(m.why_good)}</p>
+      </div>`).join('')}
+      <p class="hint" style="margin-top:10px">
+        注意后三种（抢球 / 掉球 / 说飞）是同一类：<b>球都掉地上了</b>。
+        区别只在掉法——而「抢球」是最像热络的那一种，也是这一局最想让你看见的一种。
+      </p>
+    </div>
+
+    <div class="card">
+      <div class="label">为什么是这六个动作（依据）</div>
+      ${(d.evidence || []).map((e) => `<div class="chat-ev">
+        <div class="chat-ev-h">${esc(e.who)}</div>
+        <p class="hint">${rich(e.what)}</p>
+      </div>`).join('')}
+      <p class="hint" style="margin-top:10px">${rich(d.caveat || '')}</p>
+    </div>
+
+    <div class="row"><button class="primary" onclick="startChatGame()">开始一局</button></div>
+  `;
+}
+
+/** 对方这一轮说了什么。第 0 步是开场；后面每一步都由你上一句的 keep 决定。 */
+function chatAskOf(c) {
+  if (chatGame.step === 0) return c.open || [];
+  const prev = chatGame.picks[chatGame.picks.length - 1];
+  const st = c.steps[chatGame.step];
+  return (st.ask || {})[prev && prev.choice.keep ? 'keep' : 'drop'] || [];
+}
+
+function renderChatStep() {
+  const c = chatGame.queue[chatGame.i];
+  const st = c.steps[chatGame.step];
+  const picked = chatGame.picked != null ? st.choices[chatGame.picked] : null;
+  const lastIdx = c.steps.length - 1;
+  const isLast = chatGame.step === lastIdx;
+
+  $('#view').innerHTML = `
+    <div class="card">
+      <div class="meta">
+        <span class="tag dom">场合 ${chatGame.i + 1} / ${chatGame.queue.length}</span>
+        <span class="tag">第 ${chatGame.step + 1} 句 / 共 ${c.steps.length} 句</span>
+      </div>
+      <h3 style="margin-top:6px">${esc(c.title)}</h3>
+      <p class="chat-where">${rich(c.where)}</p>
+      <blockquote class="quote">${chatAskOf(c).map((l) => `「${rich(l)}」`).join('<br>')}</blockquote>
+
+      ${picked ? '' : `<div class="opts">
+        ${st.choices.map((o, i) => `<button class="opt" onclick="answerChat(${i})">
+          ${rich(o.text)}</button>`).join('')}
+      </div>`}
+
+      ${picked ? `
+      <div class="block diag-mine">
+        <div class="label">你这句是「${esc(chatMove(picked.move).name)}」${picked.keep
+          ? '——球还在' : '——球没了'}</div>
+        <p class="hint">${rich(picked.why)}</p>
+      </div>
+      <p class="hint" style="margin-top:10px"><b>他接着说：</b></p>
+      <blockquote class="quote" id="chatNext">${
+        isLast
+          ? '<span class="hint">（这一案到这里就结束了）</span>'
+          : ((c.steps[chatGame.step + 1].ask || {})[picked.keep ? 'keep' : 'drop'] || [])
+              .map((l) => `「${rich(l)}」`).join('<br>')
+      }</blockquote>
+      <div class="row" style="margin-top:10px">
+        <button class="primary" onclick="nextChatStep()">${isLast ? '看这一案的结果' : '下一句'}</button>
+      </div>` : ''}
+    </div>
+
+    <div class="card hint">${rich(c.why)}</div>
+  `;
+}
+
+function answerChat(i) {
+  if (chatGame.picked != null) return;
+  const c = chatGame.queue[chatGame.i];
+  const st = c.steps[chatGame.step];
+  const ch = st.choices[i];
+  chatGame.picked = i;
+  chatGame.picks.push({ caseId: c.id, step: chatGame.step, choice: ch });
+  chatGame.total++;
+  if (ch.keep) { chatGame.caught++; chatGame.caseKeeps++; }
+  else chatGame.review.push({ caseTitle: c.title, text: ch.text, move: ch.move, why: ch.why });
+  chatGame.byMove[ch.move] = (chatGame.byMove[ch.move] || 0) + 1;
+  renderChatStep();
+}
+
+function nextChatStep() {
+  const c = chatGame.queue[chatGame.i];
+  chatGame.picked = null;
+  if (chatGame.step < c.steps.length - 1) {
+    chatGame.step++;
+    renderChatStep();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    return;
+  }
+  // 这一案打完 → 按「一个场合里保住了几个球」给结局
+  const k = chatGame.caseKeeps;
+  chatGame.ending = (c.endings || {})[k >= 3 ? 'all' : (k === 2 ? 'some' : 'few')] || {};
+  chatGame.phase = chatGame.i >= chatGame.queue.length - 1 ? 'done' : 'ending';
+  if (chatGame.phase === 'done') { recordChat(); renderChatResult(); }
+  else renderChatEnding();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function renderChatEnding() {
+  const c = chatGame.queue[chatGame.i];
+  const e = chatGame.ending || {};
+  $('#view').innerHTML = `
+    <div class="card">
+      <div class="meta"><span class="tag dom">${esc(c.title)}</span>
+        <span class="tag">保住 ${chatGame.caseKeeps} / ${c.steps.length} 句</span></div>
+      <h3 style="margin-top:6px">${esc(e.title || '这一案结束了')}</h3>
+      <p class="hint" style="margin-top:8px">${rich(e.text || '')}</p>
+      <div class="row" style="margin-top:12px">
+        <button class="primary" onclick="chatNextCase()">去下一个场合</button>
+      </div>
+    </div>
+  `;
+}
+
+function chatNextCase() {
+  chatGame.i++;
+  chatGame.step = 0;
+  chatGame.caseKeeps = 0;
+  chatGame.picked = null;
+  chatGame.phase = 'step';
+  renderChatStep();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function recordChat() {
+  if (chatGame.recorded) return;
+  chatGame.recorded = true;
+  if (!state.chat) state.chat = { plays: [], byMove: {} };
+  state.chat.plays.push({ ts: Date.now(), caught: chatGame.caught, total: chatGame.total });
+  if (state.chat.plays.length > 30) state.chat.plays = state.chat.plays.slice(-30);
+  Object.keys(chatGame.byMove).forEach((k) => {
+    state.chat.byMove[k] = (state.chat.byMove[k] || 0) + chatGame.byMove[k];
+  });
+  markActivity();
+  save();
+}
+
+function renderChatResult() {
+  const st = state.chat || { plays: [], byMove: {} };
+  const byMove = st.byMove || {};
+  const played = Object.keys(byMove).reduce((a, k) => a + byMove[k], 0);
+  const sorted = Object.keys(byMove).sort((a, b) => byMove[b] - byMove[a]);
+  const rate = chatGame.total ? Math.round((chatGame.caught / chatGame.total) * 100) : 0;
+
+  $('#view').innerHTML = `
+    <div class="card">
+      <div class="meta"><span class="tag dom">这一局打完了</span>
+        <span class="tag">接住 ${chatGame.caught} / ${chatGame.total} 句</span></div>
+      <h2 class="today-h" style="margin-top:6px">接住率 ${rate}%</h2>
+      <p class="hint" style="margin-top:8px">
+        这个数不看高低，看的是<b>你掉在哪儿</b>。一次掉球不说明你不擅长闲聊；
+        六次里有五次都是同一种掉法，那才是要改的地方。
+      </p>
+      <div class="chat-bars">
+        ${sorted.map((k) => {
+          const m = chatMove(k);
+          const n = byMove[k];
+          const w = played ? Math.round((n / played) * 100) : 0;
+          return `<div class="chat-bar-row">
+            <span class="chat-bar-name">${esc(m.name)}</span>
+            <span class="tbar chat-bar ${m.keep ? 'keep' : 'lost'}"><i style="width:${w}%"></i></span>
+            <span class="chat-bar-num">${n}</span>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="label">掉球的那些句（${chatGame.review.length} 句）</div>
+      ${chatGame.review.length ? chatGame.review.map((r, i) => `
+        <div class="chat-rev">
+          <div class="meta"><span class="tag tag-bad">${esc(chatMove(r.move).name)}</span>
+            <span class="tag">${esc(r.caseTitle)}</span></div>
+          <p class="hint" style="margin-top:6px">「${rich(r.text)}」</p>
+          <div class="row" style="margin-top:6px">
+            <button class="plain tiny" onclick="toggleChatReview(${i})">这句怎么了</button>
+          </div>
+          <p class="hint" id="chatrev${i}" style="display:none;margin-top:6px">${rich(r.why)}</p>
+        </div>`).join('') : `<p class="hint">
+        这一局一句都没掉——${chatGame.total} 句全接住了。可以试试把场合换成更难的那种，
+        或者去「场景对话」里真练一轮。</p>`}
+    </div>
+
+    <div class="card">
+      <div class="label">有件事值得你知道（这不是安慰）</div>
+      <p class="hint">${rich((CONTENT.chat.evidence || [])[1] ? CONTENT.chat.evidence[1].what : '')}</p>
+      <p class="hint" style="margin-top:8px">
+        它跟这一局直接相关：你刚才可能觉得某句话「会不会显得我很烦」而选了保守的那句。
+        研究里量到的正是这件事——<b>别人对你的评价比你以为的高</b>，而且越是不好意思的人，差得越大。
+        这不是让你盲目自信，只是说：<b>「他会不会觉得我烦」不能当成压住自己的理由</b>，
+        因为你的估计有个稳定的偏差方向。
+      </p>
+    </div>
+
+    <div class="row">
+      <button class="primary" onclick="startChatGame()">再来一局</button>
+      <button class="plain" onclick="chatGame = null; viewChat()">回到说明</button>
+    </div>
+  `;
+}
+
+function toggleChatReview(i) {
+  const el = document.getElementById('chatrev' + i);
+  if (el) el.style.display = el.style.display === 'none' ? '' : 'none';
+}
+
 /* ============================================================ 背景声
  *
  * 用户的要求：「我神经比较紧张，容易焦虑，所以加入音乐或者脑波。每次进入 APP
@@ -4410,7 +4734,8 @@ function setAudioAsk(on) {
 /* 二级切换条只在 showTab() 里注入一次，而不是改十几个渲染函数各加一遍。
    这样新增子视图不用动任何已有代码。 */
 const SUBNAV = {
-  practice: () => subTabs([['cards', '卡片'], ['calib', '语境校准'], ['learn', '微课'], ['signal', '信号场']],
+  practice: () => subTabs([['cards', '卡片'], ['calib', '语境校准'], ['learn', '微课'],
+    ['signal', '信号场'], ['chat', '闲聊']],
     practiceSubview, 'setPracticeSubview'),
   ai: () => subTabs([['voice', '场景对话'], ['checkup', '表达体检'], ['replay', '真实复盘']],
     aiSubview, 'setAiSubview',
@@ -4523,6 +4848,7 @@ const VIEWS = {
     if (practiceSubview === 'cards') viewCards();
     else if (practiceSubview === 'calib') viewCalib();
     else if (practiceSubview === 'signal') viewSignal();
+    else if (practiceSubview === 'chat') viewChat();
     else viewLearn();
   },
   ai: () => {

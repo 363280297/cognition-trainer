@@ -395,6 +395,7 @@ def main():
         ('signal.json', 'items', load('signal.json')['items']),
         ('stages.json', 'stages', load('stages.json')['stages']),
         ('talkhints.json', 'moves', load('talkhints.json')['moves']),
+        ('chat.json', 'cases', load('chat.json')['cases']),
     ]
     print('\n[A] 结构')
     check_ids(files)

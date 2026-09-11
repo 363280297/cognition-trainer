@@ -26,6 +26,7 @@ const chk = (l, c, e) => { console.log(`  ${c ? 'PASS' : 'FAIL'}  ${l}${e ? '  �
 
 const COMBOS = [
   ['today', null], ['practice', '卡片'], ['practice', '语境校准'], ['practice', '微课'],
+  ['practice', '闲聊'],
   ['ai', '场景对话'], ['ai', '表达体检'], ['ai', '真实复盘'],
   ['growth', '阶段'], ['growth', '偏差画像'], ['growth', '我的预案'],
 ];

@@ -105,7 +105,7 @@ check('boot 自动吸收所有内容键（不是白名单）',
 // ---------- 数据一致性 ----------
 console.log('\n[内联数据与源文件一致]');
 const embedded = JSON.parse(shim.match(/var EMBEDDED = (\{[\s\S]*?\});\r?\n/)[1]);
-for (const [name, key] of [['cards', 'cards'], ['calibration', 'phrases'],
+for (const [name, key] of [['cards', 'cards'], ['calibration', 'phrases', ['chat', 'cases']],
                            ['curriculum', 'lessons'], ['recovery', 'modes'],
                            ['scenarios', 'scenarios'], ['stages', 'stages']]) {
   const src = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', `${name}.json`), 'utf8'));

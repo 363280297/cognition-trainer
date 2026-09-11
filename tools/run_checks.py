@@ -41,6 +41,7 @@ CHECKS = [
     ("tools/check_replay_shot.js", False, "复盘传截图（切段/请求形状/失败提示/桥的形状）"),
     ("tools/check_card_feedback.js", False, "卡片反馈三条路（答对/答错/次优都讲清）"),
     ("tools/check_gate_watch.js", False, "闸门失效要如实说 + 防掉线三态（意图≠事实）"),
+    ("tools/check_chat.js", False, "闲聊：你选什么他就怎么回（机制要真的发生）"),
     ("tools/audit_content_quality.py", False, "内容库自检（人称/性别、选项自洽、占位符、重复）"),
     ("tools/audit_innerhtml.py", False, "注入面自检（不可信字符串进 innerHTML）"),
     ("tools/audit_project.js", False, "项目自检（死代码/版本/产物新鲜度/硬约束）"),

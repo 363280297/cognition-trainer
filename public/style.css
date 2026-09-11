@@ -986,6 +986,31 @@ button.plain {
 .sg-rev span { font-size: var(--fs-sm); overflow-wrap: anywhere; }
 .sg-rev-body { padding: var(--sp-1) var(--sp-1) var(--sp-2) var(--sp-1); }
 
+/* ---------- 闲聊：球在谁手里 ----------
+   六种动作的图例、出手分布的横条、掉球复盘。都用已有 token，不引新颜色。 */
+.chat-where { font-size: var(--fs-sm); color: var(--dim); margin: 0 0 var(--sp-2) 0; }
+.chat-move {
+  border: 1px solid var(--line); border-left-width: 3px; border-radius: var(--r-md);
+  padding: var(--sp-2) var(--sp-3); margin-top: var(--sp-2);
+}
+.chat-move.ok { border-left-color: var(--good-line); }
+.chat-move.bad { border-left-color: var(--bad-line); }
+.chat-move-h { display: flex; gap: var(--sp-2); align-items: center; margin-bottom: var(--sp-1); }
+.chat-move p { margin: 0 0 var(--sp-1) 0; }
+.chat-ev { margin-top: var(--sp-3); }
+.chat-ev-h { font-size: var(--fs-sm); color: var(--text); font-weight: 600; margin-bottom: var(--sp-1); }
+.chat-bars { margin-top: var(--sp-3); display: flex; flex-direction: column; gap: var(--sp-2); }
+.chat-bar-row { display: flex; align-items: center; gap: var(--sp-2); }
+.chat-bar-name { flex: 0 0 68px; font-size: var(--fs-sm); color: var(--text); }
+.chat-bar { flex: 1 1 auto; margin: 0; }
+.chat-bar.keep i { background: var(--good); }
+.chat-bar.lost i { background: var(--bad); }
+.chat-bar-num { flex: 0 0 22px; text-align: right; font-size: var(--fs-sm); color: var(--dim); }
+.chat-rev {
+  border: 1px solid var(--line); border-radius: var(--r-md);
+  padding: var(--sp-2) var(--sp-3); margin-top: var(--sp-2);
+}
+
 /* ---------- 背景声 ----------
    开关放在「卡住了」旁边：那个位置是常驻的，任何时候都点得到，
    而且两个都是"当下想用"的东西，摆一起顺理成章。 */
