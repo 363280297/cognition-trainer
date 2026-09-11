@@ -196,6 +196,38 @@ def check_signal():
             bad('signal.json', f'{i["id"]} 的 exclusive 不是布尔值（记分要用）')
 
 
+def check_id_namespace(files):
+    """id 是跨文件的**全局名**，撞名 = 静默拿错数据。
+
+    这个洞真的发生过：signal.json 里 11 道 thin 题原来叫 t01…t12，而 cards.json 的
+    「怎么接话」卡也叫 t01…t10。今天没事（信号题的 id 不进 state，没人在两张表之间查），
+    但只要哪天有人拿信号题的 id 去 CONTENT.cards.cards.find(...)，就会拿到一张接话卡、
+    而且**不报错**——正是最难看出来的那种 bug。所以这里钉死：一个 id 只能出现在一个文件里。
+    """
+    seen = {}
+    for fname, key, rows in files:
+        for r in rows:
+            i = str(r.get('id'))
+            if not i or i == 'None':
+                continue
+            seen.setdefault(i, []).append(fname)
+    for i, fs in sorted(seen.items()):
+        if len(set(fs)) > 1:
+            bad('id 命名空间', f'id「{i}」同时出现在 {sorted(set(fs))}——'
+                              '这个名字指向两样东西，查表时会静默拿错')
+
+    # 同一种 kind 用一个前缀（signal=x / base=n / thin=e）：撞名前缀不会互撞，
+    # 而是让人一眼看出这是哪一类。所以只算提示，不算错误。
+    rows = next((r for f, k, r in files if f == 'signal.json'), [])
+    by_kind = {}
+    for it in rows:
+        by_kind.setdefault(it.get('kind'), []).append(str(it['id']))
+    for k, ids in sorted(by_kind.items(), key=lambda kv: str(kv[0])):
+        pre = {i[0] for i in ids}
+        if len(pre) > 1:
+            warn('signal.json', f'kind={k} 里混用了前缀 {sorted(pre)}：{sorted(ids)[:8]}')
+
+
 # ------------------------------------------------------- B 人称 / 性别
 MALE = re.compile(r'(你爸|爸爸|父亲|男的|男性|上级|老板|领导|他知道|他说|他怕|他不想|'
                   r'他在意|他已经|他其实|他会|他能|他真正|他刚|他沉默|他愿意|他很少|他心里|他在赌|他讨厌)')
@@ -369,6 +401,7 @@ def main():
     check_cards()
     check_calibration()
     check_signal()
+    check_id_namespace(files)
     print('     卡片 %d 张 / 校准 %d 条 / 微课 %d 条 / 场景 %d 个 / 信号 %d 题'
           % (len(cards), len(files[1][2]), len(files[2][2]),
              len(files[4][2]), len(files[5][2])))

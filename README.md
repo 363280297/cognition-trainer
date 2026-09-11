@@ -752,6 +752,32 @@ Sachdeva、Iliev & Medin（2009）让被试写自己身上的正面道德特质�
 > 但能用**（Vision 是未公开的实验模型名）。所以别因为"列表里没有"就换掉它——
 > `deepseek-v4-pro` 对同一张图的回答是「无法读取图片内容」，它才是不能用的那个。
 
+### 内容库的 id 是**全局名**，禁止跨文件撞名（2.38）
+
+逐条核对内容时顺手查出来的一个**潜伏洞**，不是当下会犯的错，但犯错时不会报错：
+
+`data/signal.json` 里 11 道 thin 题原来叫 `t01`…`t12`，而 `data/cards.json` 的
+「怎么接话」卡也叫 `t01`…`t10`。**同一套名字，在两个文件里指两样东西。**
+
+今天不出事，因为查过了：信号题的 id 从不进 `state`（信号场只记聚合统计
+`{ts, d, c, hits, fa, n, maxCombo}`），而卡片 id 的每一处查表
+（`CONTENT.cards.cards.find(...)` / `findIndex`）拿到的都是卡片自己发出来的 id。
+**但只要哪天有人拿信号题的 id 去 cards 里查，就会静默拿到一张接话卡，而且不报错**
+——这正是"最难看出来"的那一类 bug，所以我把它当错误处理，而不是当风格问题。
+
+改动：11 道 thin 题 `t01`→`e01`…`t12`→`e12`；剩下一个 `t05` 本身是 `base` 题却用了
+`t` 前缀（base 一律 `n`），改成 `n14`。改名安全的前提是**先证明没人引用**——
+全仓库搜了一遍才动手，不是"看起来像命名空间"就改。
+
+新增不变量（`tools/audit_content_quality.py` 的 `check_id_namespace`）：
+**一个 id 只能出现在一个内容文件里**（跨 8 个 json 求并集查交），算 ERR；
+同一种 `kind` 内前缀不统一算 WARN（`signal=x` / `base=n` / `thin=e`——它不影响正确性，
+只是让人一眼看不出这是哪一类）。两个方向都做了反向验证：真的塞一个 `c01` 进
+signal 里，检查确实报错；不改的话它不会自己响。
+
+> 教训跟「信号场的检查」是同一条：**检查必须能证明它会响**。
+> 一个从不报警的断言，和没有断言是一样的，而且更糟——它让人以为这块被看住了。
+
 ### 对话之后：评价 + 改进措施
 
 结束一局会给你两块东西。一块是**统计**（接住了几次、没接住几次、温度、
@@ -802,7 +828,7 @@ Sachdeva、Iliev & Medin（2009）让被试写自己身上的正面道德特质�
 |---|---|
 | 包名 | `com.local.cognitiontrainer` |
 | 应用名 | 认知训练 |
-| versionCode / versionName | 39 / 2.37 |
+| versionCode / versionName | 40 / 2.38 |
 | minSdk / targetSdk | 26（Android 8.0+） / 34 |
 | 权限 | `INTERNET`、`POST_NOTIFICATIONS`、`RECEIVE_BOOT_COMPLETED`、`SYSTEM_ALERT_WINDOW`；另有 `WRITE/READ_EXTERNAL_STORAGE`，带 `maxSdkVersion=28`（新系统上不会被请求）。**没有 `RECORD_AUDIO`** |
 | 体积 | 约 0.5 MB（不需要任何 native 库） |
