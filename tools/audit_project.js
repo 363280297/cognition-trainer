@@ -276,6 +276,46 @@ console.log('\n[7 README 里点名的脚本是否都存在]');
   }
 }
 
+// ------------------------------------------- 行尾：别让一次编辑变成满屏假 diff
+//
+// 为什么要有这条：我的编辑工具在 Windows 上**会把整个文件写成 CRLF**，
+// 而仓库里这些文件是 LF。结果是一个只改了 60 行的文件在 diff 里显示 439 行，
+// 真改动全被淹掉——同一天里踩了两次（tools/test_bridge.js 785 行、
+// tools/check_read_flow.js 439 行），两次都是提交前顺手看一眼才发现的。
+//
+// 判据只看**漂移**：git 里存的是 LF、工作区变成了 CRLF，就是被工具改坏的。
+// 仓库里本来就有一些 CRLF 的老文件（server.py、data/calibration.json、
+// GateService.java 等），那些不动——它们不是这次编辑造成的，报出来只会刷屏。
+{
+  const { execSync } = require('child_process');
+  const TEXT = /\.(js|py|json|md|css|html|java|txt|xml|yml|sh)$/;
+  let flipped = [];
+  try {
+    const files = execSync('git ls-files', { cwd: ROOT, encoding: 'utf8' })
+      .split('\n').map((s) => s.trim()).filter((f) => f && TEXT.test(f));
+    for (const f of files) {
+      const p = path.join(ROOT, f);
+      if (!fs.existsSync(p)) continue;
+      if (!fs.readFileSync(p, 'utf8').includes('\r\n')) continue;   // 工作区是 LF
+      let head;
+      try {
+        head = execSync(`git show HEAD:${JSON.stringify(f)}`,
+          { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+      } catch (e) { continue; }                                     // 新文件，无 HEAD
+      if (!head.includes('\r\n')) flipped.push(f);                   // HEAD 是 LF
+    }
+  } catch (e) {
+    flipped = [];
+  }
+  if (flipped.length) {
+    note('ERR', '这些文件被改成了 CRLF（git 里存的是 LF）',
+      `${flipped.slice(0, 4).join(', ')}${flipped.length > 4 ? ` 等 ${flipped.length} 个` : ''}`
+      + '  ← diff 里会变成满屏假改动，转回 LF 即可');
+  } else {
+    console.log('  ok 没有文件被改成 CRLF（diff 里不会有假改动）');
+  }
+}
+
 // ---------------------------------------------------------------- 汇总
 console.log('\n' + '='.repeat(64));
 const errs = findings.filter((f) => f.level === 'ERR');
