@@ -61,10 +61,12 @@ final class RootGate {
     /**
      * 通过 su 跑一条命令。失败返回 null。
      *
+     * 包可见：GateWatch 也用它（把守夜脚本交给 root 起起来）。
+     *
      * 等 3 秒：su 授权弹窗可能正在等用户点确认，卡住主线程会更糟。
      * 调用方必须不在主线程上调它——所以 GateService 里是异步调的。
      */
-    private static String run(String cmd) {
+    static String run(String cmd) {
         Process p = null;
         try {
             p = new ProcessBuilder("su", "-c", cmd).redirectErrorStream(true).start();

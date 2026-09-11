@@ -70,6 +70,21 @@ final class Prefs {
         return sp(c).getBoolean("deepBlock", false);
     }
 
+    /**
+     * 防掉线：让守夜循环把被系统关掉的无障碍服务写回来。
+     *
+     * 这也是「用户想不想让它开着」的**意图**，不是「它真的在不在跑」。
+     * 真在不在跑要去读心跳文件的时间戳（GateWatch.runningSecAgo）——
+     * 这个项目已经栽过几次「记意图当事实」的坑了，这里不能再犯。
+     */
+    static void setGateWatch(Context c, boolean on) {
+        sp(c).edit().putBoolean("gateWatch", on).apply();
+    }
+
+    static boolean gateWatch(Context c) {
+        return sp(c).getBoolean("gateWatch", false);
+    }
+
     // ---------------------------------------------------------- 每日达标
     static void setDailyMet(Context c, boolean met, String date) {
         sp(c).edit()

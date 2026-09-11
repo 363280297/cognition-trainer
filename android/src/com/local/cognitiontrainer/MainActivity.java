@@ -554,6 +554,32 @@ public class MainActivity extends Activity {
         }
 
         /**
+         * 防掉线开关。系统在「强行停止」时会把无障碍服务一起撤销，而且不自愈；
+         * 开了这个，root 那边跑一个循环，发现被撤销就写回去（实测 1 秒内修回来）。
+         *
+         * 同样异步：su 那次调用可能弹授权框。做完把结果回传给网页——
+         * 成功也回传，因为「看起来开了、其实没跑起来」正是要避免的那种状态。
+         */
+        @JavascriptInterface
+        public void setGateWatch(int on) {
+            final boolean want = on == 1;
+            Prefs.setGateWatch(MainActivity.this, want);
+            new Thread(() -> {
+                String why = want ? GateWatch.start(MainActivity.this) : null;
+                if (!want) GateWatch.stop(MainActivity.this);
+                js("window.__onGateWatch && window.__onGateWatch("
+                        + q(GateWatch.status(MainActivity.this))
+                        + (why == null ? "" : ", " + q(why)) + ")");
+            }, "eq-gate-watch").start();
+        }
+
+        /** 读状态，不阻塞、不触发 su：只读心跳文件的时间戳和本地开关。 */
+        @JavascriptInterface
+        public String gateWatchStatus() {
+            return GateWatch.status(MainActivity.this);
+        }
+
+        /**
          * 把网页那份进度写成「下载/认知训练/认知训练-进度备份.json」。
          *
          * 卸载时这一份**会留下**（外部存储，卸载不动它），所以重装之后还能捞回来。

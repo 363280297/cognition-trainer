@@ -385,18 +385,23 @@ t('杀进程在冷却判断之前（两秒内重开也跑不掉）',
  *   「卸载一些残留的文本数据是可以留下来的，除非我再用清理软件给它清掉。
  *     然后所有的进程，什么代码，脚本什么的那些都要删掉，只留下文本数据。」
  *
- * 也就是：**允许留数据，不许留可执行的东西**。落到实现上：
- *   - 唯一允许写到外部存储的是那个 .json 纯文本（BackupStore）；
- *   - 不许往磁盘写脚本/可执行文件（.sh/.bash/.dex/.apk/.jar/.so/.js）——
- *     尤其不许把 root 要跑的命令写成一个脚本再执行，那样脚本就留下了；
- *   - root 必须继续是一次性的 ProcessBuilder 调用。
+ * 也就是：**允许留数据，不许留可执行的东西**。判据是「卸载之后还剩什么」。
  *
- * 这几条都在下面钉住。它们描述的是「卸载之后还剩什么」这个性质，
- * 所以必须由测试守，不能靠自觉——一旦有人为了「拦得更狠」改成写脚本，
- * 用户的原始要求就被悄悄破坏了。
+ * ── 2.38 这里放宽了一次，要写清楚为什么 ──────────────────────────
+ * 原来这一节写的是「不许往磁盘写脚本，root 必须是一次性的 ProcessBuilder 调用」，
+ * 理由是「那样脚本就留下了」。2.38 加了「防掉线」——Android 在强行停止应用时会把
+ * 无障碍服务一并撤销且不自愈（实测：force-stop 后 enabled_accessibility_services
+ * 被清成 null，等 15 秒也不回来），而大多数 ROM 把「从最近任务划掉」就实现成
+ * force-stop。要修它，就必须有一个 root 下的守夜循环，也就必须有脚本。
+ *
+ * 所以判据从**形式**（有没有 .sh）改成了**实质**（会不会留下）：
+ *   · 脚本只允许写在应用私有目录（getFilesDir）——卸载时系统会连目录一起删；
+ *   · 脚本自己每轮检查包还在不在，卸载后主动退出（这条也有断言）；
+ *   · 外部存储那一条一个字没松：仍然只许写那一个 .json，而且不许是 .sh/.dex/.apk。
+ * 「卸载后什么都没有留下」这个性质没变，变的只是它可以被实现了。
+ * 这一条改动是**用户明确要求用 root 做功能**之后做的，不是自己松的。
  */
 const EXT_BAD = [
-  [/\.sh\b/, '写 .sh 脚本'],
   [/\.bash\b/, '写 .bash 脚本'],
   [/\.dex\b|\.apk\b|\.jar\b|\.so\b/, '写可执行/库文件'],
   [/\.js\b/, '写 .js 文件'],
@@ -407,12 +412,35 @@ for (const { f, s } of rawCode) {
     if (re.test(s)) extHits.push(`${f}: ${label}`);
   }
 }
-t('没有任何一处往磁盘写脚本或可执行文件', extHits.length === 0,
+t('没有任何一处往磁盘写可执行/库文件', extHits.length === 0,
   extHits.length ? extHits.join('; ') : `${srcFiles.length} 个源文件干净`);
 
-// 唯一允许的外部写入：BackupStore，而且必须是文本 .json，而且不许是 .sh
-// 要看**剥过注释的**源码：这个文件顶部的注释里正好列着「不许写 .sh/.dex/.apk」，
-// 不剥注释就会把说明本身当成违规（同一个坑踩第三次了，所以这里写下来）。
+/* .sh 只允许出现在 GateWatch 里，而且必须落在私有目录（getFilesDir）。
+   别的地方写 .sh 一律算违规——包括"顺手把命令写进外部存储"那种。 */
+const shWriters = rawCode.filter(({ s }) => /\.sh\b/.test(s)).map((x) => x.f);
+t('.sh 只由 GateWatch 写，且只写进私有目录',
+  shWriters.every((f) => f === 'GateWatch.java')
+  && /getFilesDir\(\)/.test((rawCode.find((x) => x.f === 'GateWatch.java') || {}).s || '')
+  && /openRawResource\(R\.raw\.eq_gate\)/.test(
+    (rawCode.find((x) => x.f === 'GateWatch.java') || {}).s || ''),
+  shWriters.length ? `写 .sh 的文件：${shWriters.join(', ')}` : '没有任何文件提到 .sh');
+
+/* 守夜脚本必须自己检查「包还在不在」——这是「卸载即退出」的唯一实现。
+   没有它，卸载之后循环会继续跑，还会为一个不存在的包反复写系统设置。 */
+const watchSh = fs.readFileSync(
+  path.join(ROOT, 'android', 'res', 'raw', 'eq_gate.sh'), 'utf8');
+t('守夜脚本卸载后会自己退出（每轮检查包还在不在）',
+  /pm path/.test(watchSh) && /exit 0/.test(watchSh),
+  '脚本里有 pm path 检查 + 退出');
+
+/* 守夜脚本禁止覆盖别人的无障碍服务。
+   enabled_accessibility_services 是一整份冒号分隔的列表，settings put 是整体覆盖；
+   直接写自己那一个，会把用户其它无障碍服务全关掉。所以必须"先读、缺了才追加"。 */
+t('守夜脚本只追加、不覆盖别人的无障碍服务',
+  /\$cur:\$SVC/.test(watchSh) && /settings get secure enabled_accessibility_services/.test(watchSh),
+  '先读列表，缺了才用 : 追加');
+
+/* 外部存储只写一个纯文本 .json 备份 */
 const backupSrc = (rawCode.find((x) => x.f === 'BackupStore.java') || {}).s || '';
 t('外部存储只写一个纯文本 .json 备份',
   /\.json/.test(backupSrc)
@@ -420,8 +448,12 @@ t('外部存储只写一个纯文本 .json 备份',
   && /openOutputStream|FileOutputStream/.test(backupSrc),
   'BackupStore 里只有 .json 一处落盘');
 
-// root 那条路必须是「一次性命令」，不许落盘成脚本
-t('root 走一次性 ProcessBuilder，不落盘成脚本',
+
+/* RootGate 只负责「执行一条命令」，自己不落盘。
+   注意这条现在**只管** RootGate（深度拦截那条路）；唯一允许写脚本的是 GateWatch，
+   规矩在上一节里单独钉住。别把这条的标题读成「全项目都不写脚本」——
+   2.38 之后已经不是那样了。 */
+t('RootGate 只执行命令、自己不落盘',
   /ProcessBuilder\("su", "-c", cmd\)/.test(rootSrc)
   && !/FileOutputStream|FileWriter|writeBytes/.test(rootSrc),
   'RootGate 只执行、不写文件');

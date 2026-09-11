@@ -60,7 +60,11 @@ const DEFAULT_STATE = {
   // rootKnown / rootOk 是三态而不是布尔：null 表示「还没探测过」。
   // 压成 false 会把「未知」显示成「root 不可用」，那是误报。
   gate: { armed: false, packages: [], enabled: false,
-          deepBlock: false, rootKnown: false, rootOk: false },
+          deepBlock: false, rootKnown: false, rootOk: false,
+          // 防掉线：want 是「用户想不想开着」，running 是「心跳文件真的在跳吗」。
+          // 两个都要留着——这个项目栽过好几次「把意图当事实」（达标那次的
+          // 无条件加一、备份那次的只记写过），所以这里从数据结构上就分开。
+          watch: { want: false, running: false, ago: -1 } },
   // at = 最近一次写备份的时间，ok/where = 那次写的结果。
   // 它只是「上次写的结果」，不是「备份现在好不好」——后者每次都要问原生读一遍。
   backup: { at: 0, ok: false, where: '' },
@@ -2900,6 +2904,11 @@ function openDailySettings() {
   const hasNotif = window.EQNative && EQNative.hasNotifPermission
     ? EQNative.hasNotifPermission() : false;
 
+  // 防掉线的状态每次都跟原生要一遍，不用缓存里的那份。
+  // 理由和上面 hasAcc / hasOv 一样：这个面板的职责就是「现在到底什么状态」，
+  // 拿上次渲染时存的旧值去说现在的事，正是要避免的那种假状态。
+  const w = refreshGateWatch();
+
   // 深度拦截的状态要显示成三态，不能是布尔：
   // 「探测过、root 可用」「探测过、root 不可用」「还没探测」是三件不同的事，
   // 压成两态就会出现「未知」被显示成「不可用」这种误报。
@@ -2912,6 +2921,23 @@ function openDailySettings() {
           ? '<b>root 可用，深度拦截已开启</b>——目标应用启动后会被直接杀掉。'
           : 'root 可用，深度拦截还没开。')
         : '<b>root 不可用</b>——打开也不会生效，拦截只能退回成推浮层。'));
+
+  // 防掉线的状态。三态，规矩和上面两条一样：不许把「不知道」说成「没有」。
+  // 最要命的那一态是「开关开着、但它没在跑」——那正是「以为有保护、其实没有」，
+  // 必须写在脸上，不能只显示一个「已开启」。
+  let watchTxt;
+  if (!window.EQNative || !EQNative.gateWatchStatus) {
+    watchTxt = '只在 Android App 里可用。';
+  } else if (!w.want) {
+    watchTxt = '没开。掉了就得自己回系统设置里重开一次无障碍。';
+  } else if (w.running) {
+    watchTxt = `<b>在跑</b>（${w.ago} 秒前还有心跳）——闸门被系统关掉会自动装回来。`;
+  } else {
+    watchTxt = '<b>开关是开的，可它没在跑</b>，所以闸门还是会掉。'
+      + '多半是 root 被拒了或者 root 没了；重新检测一次，不行就先关掉它——'
+      + '留着一个「开着但没用」的开关比没有更糟。'
+      + `（读到的心跳：${w.ago < 0 ? '没有' : w.ago + ' 秒前' }）`;
+  }
 
   // 备份状态：三态，同样不许把「不知道」说成「没有」或「好着呢」。
   // 真实状态来自原生读回文件的结果，不是来自「我们写过一次」这个记忆。
@@ -3033,6 +3059,36 @@ function openDailySettings() {
         </div>
       </div>
 
+      <!-- 防掉线。这一条是实测出来的需求：Android 在「强行停止」时会连无障碍服务
+           一起撤销，而且不自愈；而多数国产 ROM 把「从最近任务划掉」就实现成 force-stop。
+           所以用户划一下，闸门就没了，而且界面还在说「闸门已开」。 -->
+      <div class="block">
+        <div class="label">防掉线（需要 root）</div>
+        <p class="hint">
+          这一条解决的是个实测过的问题：<b>从最近任务里划掉本应用，闸门会一起消失。</b>
+          原因是 Android 在「强行停止」一个应用时，会把它的无障碍服务<b>一并撤销</b>
+          （不是被杀后台——普通的后台清理反而碰不到它），而且不会自己恢复。
+          多数国产系统把「划掉」就当成强行停止，所以划一下就没。
+        </p>
+        <p class="hint" style="margin-top:8px">
+          打开之后，root 那边跑一个小循环：每 2 秒看一眼本应用在不在，发现被撤了就
+          把无障碍服务写回去。实测<b>1 秒内闸门就回来</b>，而且不会覆盖你其它无障碍服务
+          （那个设置是一整份列表，写的时候是先读、缺了才追加）。
+        </p>
+        <p class="hint" style="margin-top:8px">
+          边界说清楚：它<b>不</b>往系统分区写东西、<b>不</b>做开机自启、<b>不</b>隐藏自己。
+          循环每一轮都会检查包还在不在，<b>卸载之后它自己就退出了</b>；
+          那个脚本也放在应用的私有目录里，卸载会被一起删掉。
+        </p>
+        <div class="hint" style="margin-top:8px">当前状态：${watchTxt}</div>
+        <div class="row" style="margin-top:10px">
+          ${(g.rootKnown && g.rootOk) || w.want
+            ? `<button class="plain" onclick="toggleGateWatch()">${w.want ? '关掉防掉线' : '开启防掉线'}</button>`
+            : ''}
+          <button class="ghost" onclick="probeRootNow()">${w.want ? '重新检测 root' : '检测 root'}</button>
+        </div>
+      </div>
+
       <div class="block">
         <div class="label">进度备份</div>
         <p class="hint">
@@ -3041,9 +3097,10 @@ function openDailySettings() {
           重装之后可以捞回来。要彻底清掉，用你的清理软件删那个文件就行。
         </p>
         <p class="hint" style="margin-top:8px">
-          落盘的东西只有这一个 <span class="mono-line">.json</span> 文本文件。
-          <b>不写脚本、不写可执行文件、不留常驻进程</b>——卸载之后磁盘上不会有
-          任何还能跑起来的东西。
+          落在公共目录的东西只有这一个 <span class="mono-line">.json</span> 文本文件。
+          应用私有目录里另有一份「防掉线」的 shell 脚本（<b>只有开了它才会写</b>）：
+          卸载会把私有目录整个删掉，那个守夜循环每轮也会检查包还在不在、卸载后自己退出。
+          所以<b>卸载之后磁盘上不会有任何还能跑起来的东西</b>。
         </p>
         <div class="hint" style="margin-top:8px">${backupTxt}</div>
         <div class="row" style="margin-top:10px">
@@ -3137,6 +3194,67 @@ function toggleDeepBlock() {
     ? '深度拦截开了——目标应用启动后会被直接杀掉'
     : '深度拦截关了，只剩把游戏挤到后台');
 }
+
+/* ------------------------------------------------------------ 防掉线
+ *
+ * 「开着」和「真的在跑」是两件事，这个面板必须说后者。
+ * 一个应用读不到 root 进程的 /proc，所以判断依据是原生那边**心跳文件的时间戳**：
+ *   running=true  → 循环还活着，闸门掉了它会自己装回来
+ *   running=false → 用户开了，但循环没在跑（root 被撤、su 被拒、或者它自己退出了）
+ * 后者是最坏的状态——和「以为有深度拦截其实没有」是同一类，所以必须显示出来，
+ * 而且要能一眼看出「开关开着但没生效」。 */
+
+/** 从原生要一次真实状态，写进 state，返回它。原生不在时给一个保守的默认。 */
+function refreshGateWatch() {
+  let w = { want: false, running: false, ago: -1, rootKnown: false, rootOk: false };
+  if (window.EQNative && EQNative.gateWatchStatus) {
+    try {
+      const o = bridgeObj(EQNative.gateWatchStatus());
+      if (o) w = Object.assign(w, o);
+    } catch (e) { /* 读不到就按上面的默认值，也就是「没在跑」 */ }
+  }
+  state.gate = state.gate || {};
+  state.gate.watch = w;
+  return w;
+}
+
+/* 用户自己点了「开启/关掉防掉线」吗？用来区分「用户点的」和「启动时后台确认的」——
+   前者要报结果，后者报了就只是噪音。 */
+let watchAsked = false;
+
+function toggleGateWatch() {
+  if (!window.EQNative || !EQNative.setGateWatch) {
+    toast('这个功能只在 Android App 里可用');
+    return;
+  }
+  const w = refreshGateWatch();
+  const want = !w.want;
+  watchAsked = true;
+  try { EQNative.setGateWatch(want ? 1 : 0); } catch (e) { watchAsked = false; }
+  // 不在这里 toast 结果：su 是异步的，现在说什么都是猜的。
+  // 原生干完会回调 __onGateWatch，那里才是有依据的那句话。
+  if (watchAsked) toast(want ? '正在启动防掉线…（root 可能弹一次授权框）' : '正在关掉防掉线…');
+}
+
+/** 原生启停完回调过来。payload 是 q() 包过的 JSON 字符串，所以要归一化。 */
+window.__onGateWatch = function (payload, why) {
+  const o = bridgeObj(payload);
+  if (!o) return;
+  state.gate = state.gate || {};
+  state.gate.watch = o;
+  state.gate.rootKnown = !!o.rootKnown;
+  state.gate.rootOk = !!o.rootOk;
+  save();
+  // 只在设置面板开着的时候就地刷新它（和 toggleDeepBlock 那边一个规矩）；
+  // 启动时也会走一次这条路（见 boot 里重新确认它在跑），那时候不该弹面板。
+  if (document.querySelector('.sheet')) openDailySettings();
+  // 只有用户自己点的才报结果。启动时那次是后台确认，弹 toast 是噪音。
+  if (!watchAsked) return;
+  watchAsked = false;
+  if (why) toast('防掉线没启动成功：' + why);
+  else if (o.want) toast(o.running ? '防掉线在跑了' : '启动了，但还没看到心跳——稍等一下再看');
+  else toast('防掉线关了');
+};
 
 /* 应用清单缓存。挑应用这个面板会被反复打开（挑一个 → 关掉 → 再挑一个），
    每次都去问一次原生没必要，而且列表长的话会有可见的延迟。 */
@@ -4320,6 +4438,15 @@ function renderToday() {
   const cur = currentStage();
   const g = state.gate || {};
 
+  // 闸门那张卡不许只看 armed。armed 算的是「你想拦 + 今天还没达标」，
+  // 也就是**意图**；而系统那边完全可能已经把无障碍服务撤了（划掉应用就是这种情况）。
+  // 那时候 card 上写着「闸门已开、打开应用会先弹这个页面」——是句假话，
+  // 而且用户只有真去打游戏才发现。所以这里必须跟系统对一次账。
+  // 这一条和「达标要判对才算」是同一个道理：界面说的必须是事实，不是期望。
+  const gateLive = !!window.EQNative && !!EQNative.hasAccessibility
+    ? EQNative.hasAccessibility() : null;   // null = 不在 App 里，判断不了
+  const gateBroken = g.armed && gateLive === false;
+
   $('#view').innerHTML = `
     <div class="card today-card ${p.met ? 'today-met' : ''}">
       <div class="meta">
@@ -4351,12 +4478,17 @@ function renderToday() {
       ${!p.met && p.skipped ? `<div class="row"><button class="plain" onclick="openFog('每日计划')">脑雾通道</button></div>` : ''}
     </div>
 
-    ${g.enabled ? `<div class="card gate-status ${g.armed ? 'armed' : ''}">
-      <div class="meta"><span class="tag ${g.armed ? 'tag-warn' : 'tag-good'}">${g.armed ? '闸门已开' : '闸门已解除'}</span>
+    ${g.enabled ? `<div class="card gate-status ${gateBroken ? 'gate-broken' : (g.armed ? 'armed' : '')}">
+      <div class="meta"><span class="tag ${gateBroken ? 'tag-bad' : (g.armed ? 'tag-warn' : 'tag-good')}">${
+        gateBroken ? '闸门失效了' : (g.armed ? '闸门已开' : '闸门已解除')}</span>
         <span class="tag">${(g.packages || []).length} 个目标应用</span></div>
-      <p class="hint" style="margin-top:8px">${g.armed
-        ? '没达标之前，打开你指定的应用会先弹这个页面。达标之后自动解除。'
-        : '今天已达标，游戏随便打。'}</p>
+      <p class="hint" style="margin-top:8px">${gateBroken
+        ? '开关是开的，但<b>系统那边已经把无障碍服务关掉了</b>，所以现在拦不住任何东西。'
+          + '多半是你从最近任务里划掉过它——Android 会顺手撤销无障碍服务，而且不会自己恢复。'
+          + '想彻底解决就打开「防掉线」（需要 root），开了之后它会自己装回来。'
+        : (g.armed
+          ? '没达标之前，打开你指定的应用会先弹这个页面。达标之后自动解除。'
+          : '今天已达标，游戏随便打。')}</p>
       <div class="row"><button class="plain" onclick="openDailySettings()">设置</button></div>
     </div>` : ''}
 
@@ -4505,6 +4637,16 @@ document.querySelectorAll('#tabs button').forEach((b) => {
   state.gate.rootKnown = false;
   state.gate.rootOk = false;
   syncGate();
+
+  /* 防掉线：用户开过的话，每次启动顺手确认一遍它还在跑。
+     守夜脚本用 mkdir 锁做了幂等，已经在跑的实例会让新实例直接退出，
+     所以这里重复调用是安全的；而它正好兜住「循环被系统清掉了」——
+     下次打开应用就把它装回去。
+     只在用户自己开过的时候才做：没开过就绝不去碰 root。 */
+  if (state.gate.watch && state.gate.watch.want
+      && window.EQNative && EQNative.setGateWatch) {
+    try { EQNative.setGateWatch(1); } catch (e) { /* 面板上会如实显示它没跑起来 */ }
+  }
 
   // 重装之后把上次留在「下载」里的那份捞回来。
   //

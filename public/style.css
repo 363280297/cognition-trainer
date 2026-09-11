@@ -709,6 +709,9 @@ button.plain {
 
 .gate-status { border-left: 3px solid var(--line); }
 .gate-status.armed { border-left-color: var(--warm); }
+/* 「开关开着、但系统那边已经关了」——这一态必须看得见，它比没开更危险：
+   没开你至少知道没有保护，这一态你不看就以为有。 */
+.gate-status.gate-broken { border-left-color: var(--bad-line); }
 
 /* ---------- 「!」小弹窗 ----------
    正文只留结论，过程性解释收进这个。点一下弹出来，点空白或 ✕ 关掉。
