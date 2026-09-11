@@ -1172,15 +1172,31 @@ function answerCard(chosen) {
         <div class="diag-why">${rich(card.state)}</div>
       </div>` : ''}
 
-      ${(!ok && bt) ? `
+      <!-- 「你选的这条」这一块，次优（half）也要显示。
+           原来这里的条件是「不是首选 且 有偏差类型」，而 half 选项的 err 是「正解」
+           （不在 BIAS_TYPES 里，取出来是 undefined），于是整块不渲染。后果很别扭：
+           答得差不多的反馈比答错的还少——答错会得到「问题出在哪 + 往哪个方向改」，
+           答「也算说得通」却只看到一句「不是首选」，而那条选项自己的 why
+           （数据里早就写好了）哪里都没显示。
+           次优恰恰是最值得讲的一类：它是最接近的错法，差在哪才是要学的点。
+           所以拆成两支：有偏差类型 → 老样子（诊断 + 改法）；没有 → 讲清它为什么不是首选。
+
+           注意：这段是 **HTML 注释**，不是 JS 的块注释。这个模板是整块 template
+           literal，用 /* */ 写的话注释会当成正文渲染出来（我刚好踩了一次，
+           check_tabs_unique 里那条「界面上没有露出来的 **」当场就红了）。
+           另外反引号也不能出现——它会把模板字符串截断。 -->
+      ${!ok ? `
       <div class="block diag-mine">
-        <div class="label">你选的这条，问题出在哪</div>
+        <div class="label">${bt ? '你选的这条，问题出在哪' : '你选的这条，为什么不是首选'}</div>
         <div class="diag-head">
           <b>${chosen}</b> · ${rich(picked.text || '')}
-          <span class="tag tag-bad">${esc(bt.label)}</span>
+          ${bt ? `<span class="tag tag-bad">${esc(bt.label)}</span>` : '<span class="tag">说得通，但更远</span>'}
         </div>
         <div class="diag-why">${rich(picked.why || '')}</div>
-        <div class="diag-fix"><b>往这个方向改：</b>${rich(bt.fix)}</div>
+        ${bt ? `<div class="diag-fix"><b>往这个方向改：</b>${rich(bt.fix)}</div>`
+          : `<div class="diag-fix"><b>它和首选差在哪：</b>它不是读错，是<b>读得浅一层</b>——
+              放在别的场合它可能就是对的，但这一次还有一层你没用上。上面「首选答案」那段
+              说的就是那一层。</div>`}
       </div>` : ''}
 
       <div class="block">

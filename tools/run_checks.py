@@ -39,6 +39,7 @@ CHECKS = [
     ("tools/check_doubao.js", False, "音色/引擎相关"),
     ("tools/check_voice_pack.js", False, "语音包"),
     ("tools/check_replay_shot.js", False, "复盘传截图（切段/请求形状/失败提示/桥的形状）"),
+    ("tools/check_card_feedback.js", False, "卡片反馈三条路（答对/答错/次优都讲清）"),
     ("tools/audit_content_quality.py", False, "内容库自检（人称/性别、选项自洽、占位符、重复）"),
     ("tools/audit_innerhtml.py", False, "注入面自检（不可信字符串进 innerHTML）"),
     ("tools/audit_project.js", False, "项目自检（死代码/版本/产物新鲜度/硬约束）"),
