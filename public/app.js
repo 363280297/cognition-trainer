@@ -2241,7 +2241,31 @@ const CHECKUP_SYSTEM = `你在做一次"表达体检"：用户会给你一句他
 }
 只输出 JSON。signals 最多 3 条，只写真正有问题的维度。`;
 
-const REPLAY_Q_SYSTEM = `用户在复盘一段真实聊天记录。你的任务**不是**直接给答案，而是先出题让他自己判断，
+/* 真实复盘的两步：**共用前缀 + 各自的任务说明**。
+ *
+ * 为什么拆成这个形状（2.42 改的，这是一次实打实的省钱改动）：
+ *   原来两次调用各自带一个**不同的 system**（出题 425 字 / 揭晓 1240 字），都放在最前面，
+ *   而【聊天记录】跟在后面。于是同一段记录在两次调用里落在**不同的 token 偏移**上，
+ *   DeepSeek 的前缀缓存一次也用不上——而记录是用户自己粘的，可能两万字，
+ *   是这个 App 里最贵的一块输入。等于同一段话按全价买了两遍。
+ *
+ *   现在的形状：system（两处**逐字相同**）→ 【聊天记录】（两处**逐字相同**）→ 任务说明。
+ *   前面两段一模一样，所以第二次调用能按缓存价读到它们。两次调用、同一套题目、
+ *   同样的输出，功能一点没少——只是把说明挪到了记录后面。
+ *
+ * **改这里要注意**：REPLAY_SHARED_SYS 和 replayRecord() 这两处必须两边一致，
+ * 一旦不一致，缓存就整个失效（而功能看起来完全正常，你不会收到任何报错）。
+ * tools/check_token_budget.js 里有断言盯着这件事。 */
+const REPLAY_SHARED_SYS = `你是中文情商教练，正在陪用户复盘一段真实的聊天记录。
+记录在下一条消息里。先读完它，再按最后一条消息里的要求输出。只输出 JSON，不要多余文字。`;
+
+/** 记录那一段。两次调用必须逐字相同，所以抽成一个函数，只留一个写法。 */
+function replayRecord(chat) {
+  return `【聊天记录】
+${chat}`;
+}
+
+const REPLAY_Q_TASK = `你的任务**不是**直接给答案，而是先出题让他自己判断，
 这样才能训练他的判断力而不是依赖你。
 
 根据聊天记录出 2-3 道题，考察：对方情绪在哪一句发生了转折、哪一句是整段对话的分水岭、
@@ -2262,7 +2286,7 @@ const REPLAY_Q_SYSTEM = `用户在复盘一段真实聊天记录。你的任务*
 }
 每道题 3-4 个选项。选项里必须至少有一个是"这就是字面意思，没有潜台词"。只输出 JSON。`;
 
-const REPLAY_REVEAL_SYSTEM = `用户已经先自己答过一遍了，现在给他完整分析。顺序很重要：
+const REPLAY_REVEAL_TASK = `他已经先自己答过一遍了，现在给他完整分析。顺序很重要：
 先确认他答对/答错的地方，再给解读，最后才给可选的回应方向。
 
 用户明确要求过这段输出要包含三件事：**把情况分析清楚**、**我该怎么回**、
@@ -2315,22 +2339,26 @@ async function aiCheckup(text, context) {
 }
 
 async function aiReplayQuestions(chat, background) {
-  let user = `【聊天记录】\n${chat}`;
   const extra = (background || '').trim();
-  if (extra) user += `\n\n【背景补充】\n${extra}`;
-  return await llmCall(
-    [{ role: 'system', content: REPLAY_Q_SYSTEM }, { role: 'user', content: user }],
-    { maxTokens: 4000 });
+  // 背景补充放进**任务那一条**，不放进记录那条——记录那两条消息必须逐字相同，
+  // 前缀缓存才认得出来（理由见上面那段说明）。
+  const task = REPLAY_Q_TASK + (extra ? `\n\n【背景补充】\n${extra}` : '');
+  return await llmCall([
+    { role: 'system', content: REPLAY_SHARED_SYS },
+    { role: 'user', content: replayRecord(chat) },
+    { role: 'user', content: task },
+  ], { maxTokens: 4000 });
 }
 
 async function aiReplayReveal(chat, answers) {
   const given = (answers || []).map((a, i) =>
     `第${i + 1}题 他选了：${a.chosen || '(未答)'}；正确答案是：${a.correct || ''}`).join('\n')
     || '（用户跳过了前面的题）';
-  const user = `【聊天记录】\n${chat}\n\n【他的作答情况】\n${given}`;
-  return await llmCall(
-    [{ role: 'system', content: REPLAY_REVEAL_SYSTEM }, { role: 'user', content: user }],
-    { maxTokens: 5000 });
+  return await llmCall([
+    { role: 'system', content: REPLAY_SHARED_SYS },
+    { role: 'user', content: replayRecord(chat) },
+    { role: 'user', content: `${REPLAY_REVEAL_TASK}\n\n【他的作答情况】\n${given}` },
+  ], { maxTokens: 5000 });
 }
 
 /* ======================================================== 视图：阶段评估 */

@@ -18,6 +18,12 @@ const { chromium } = require(PW);
 const { pathToFileURL } = require('url');
 const path = require('path');
 const fs = require('fs');
+/* 现成场景的数量从数据文件读，**不要写死在断言里**。
+   写死的那一刻起，往 scenarios.json 里加一个场景就会让这份检查红——
+   而红的原因跟被检查的性质毫无关系。这个项目已经被同一种硬编码数字咬过几次了
+   （README 里的卡片统计、界面上的版本号），所以这里从一开始就从数据取。 */
+const BUILTIN = JSON.parse(fs.readFileSync(
+  path.join(__dirname, '..', 'data', 'scenarios.json'), 'utf8')).scenarios.length;
 const EXE = process.env.EQ_CHROME
   || 'C:\\Users\\Lenovo\\AppData\\Local\\ms-playwright\\chromium-1234\\chrome-win64\\chrome.exe';
 const OFFLINE = pathToFileURL(path.join(__dirname, '..', '认知训练-离线版.html')).href;
@@ -74,9 +80,15 @@ const SC_SRC = `window.__SC = (title, stage, difficulty, theme) => ({
   chk('缺口顺序是从少到多（升序）',
     gap.orderCounts.every((n, i) => i === 0 || gap.orderCounts[i - 1] <= n),
     gap.order.map((k) => `${k}:${gap.count[k]}`).join(' '));
-  chk('只有 1 个的那几个关系排在缺口表最前面',
-    gap.orderCounts[0] === 1 && gap.orderCounts[4] === 1, JSON.stringify(gap.orderCounts));
-  chk('难度缺口算出来了（现成 14 个里最难找的是那几档）',
+  /* 要守的性质是「最少的关系排在前面」——也就是这串数是非递减的，
+     而且第一个就是最小值。原来的写法是「第 0 个和第 4 个都等于 1」，
+     那其实是在暗地里假设「现成场景永远是 14 个、正好有五个关系各 1 个」；
+     一旦多加一个场景，第 4 位就变成 2，断言就红，而排序本身完全正确。 */
+  const oc = gap.orderCounts;
+  chk('缺口表按数量升序（最少的关系排最前）',
+    oc.every((v, i) => i === 0 || oc[i - 1] <= v) && oc[0] === Math.min(...oc),
+    JSON.stringify(oc));
+  chk('难度缺口算出来了（现成场景里最难找的是那几档）',
     ['1', '2', '3'].indexOf(gap.thinnest) >= 0, JSON.stringify(gap.diff));
   chk('现成场景的关系能映射到列表用的那几类',
     gap.domainOf.every((d) => ['恋爱', '职场', '朋友', '家人', '泛社交'].indexOf(d) >= 0),
@@ -103,7 +115,7 @@ const SC_SRC = `window.__SC = (title, stage, difficulty, theme) => ({
   chk('brief 里给了完整的关系枚举（不许模型自己编关系名）',
     brief.stages.every((k) => brief.b6.includes(k)));
   chk('已有标题都喂进去了（去重靠它）',
-    brief.titleN >= 14 && brief.b6.includes(brief.title0), `${brief.titleN} 个，含「${brief.title0}」`);
+    brief.titleN >= BUILTIN && brief.b6.includes(brief.title0), `${brief.titleN} 个，含「${brief.title0}」`);
   chk('补造时会把"这一轮已经造出来的"也贴上，免得补的又撞',
     brief.b2.includes('刚造的一个'), '');
 
@@ -305,7 +317,8 @@ const SC_SRC = `window.__SC = (title, stage, difficulty, theme) => ({
     window.llmCall = saved;
     return out;
   });
-  chk('场景库把现成的和 AI 造的都算进来', ui.total === 17, `${ui.total} 个（14 + 3）`);
+  chk('场景库把现成的和 AI 造的都算进来', ui.total === BUILTIN + 3,
+    `${ui.total} 个（现成 ${BUILTIN} + AI 造 3）`);
   chk('筛选条上有"全部"和已知的那几类关系',
     ui.chips[0] === '全部' && ui.chips.length >= 4, ui.chips.join('、'));
   chk('每个关系旁边标了数量', ui.chips.slice(1).every((c) => /\d/.test(c)), ui.chips.join('、'));
@@ -322,7 +335,7 @@ const SC_SRC = `window.__SC = (title, stage, difficulty, theme) => ({
     ui.afterReset === 6, String(ui.afterReset));
   chk('点「看全部」之后按关系分组，每组一个小标题',
     ui.groups.length >= 4 && ui.groups.indexOf('职场') >= 0, ui.groups.join('、'));
-  chk('展开后 17 个全在页面上', ui.allShown === 17, String(ui.allShown));
+  chk('展开后全部的都在页面上', ui.allShown === BUILTIN + 3, String(ui.allShown));
   chk('练过的场景标了「练过 N 次」', /练过 2 次/.test(ui.playedMeta), ui.playedMeta);
 
   // ============================================== 七、从库里点开一局

@@ -66,10 +66,14 @@ const REPLAY_R = {
       httpPost: async (id, url, headersJson, body) => {
         const j = JSON.parse(body);
         window.__reqs.push({ url, model: j.model, messages: j.messages, max_tokens: j.max_tokens });
-        // 按系统提示词判断该回哪一份假数据
-        const sys = (j.messages[0] || {}).content || '';
-        const out = /表达体检/.test(sys) ? sc.checkup
-          : /先出题让他自己判断/.test(sys) ? sc.q : sc.r;
+        /* 按提示词判断该回哪一份假数据。看**整段请求**，不是只看 messages[0]：
+           2.42 把真实复盘的任务说明从 system 挪到了后面的消息里（目的是让出题和揭晓
+           共用同一段前缀、拿到缓存价）。只看 messages[0] 的话，假数据会认错——
+           把「揭晓」那份回给了「出题」这一步，于是流程走到一半就停住。
+           假数据该跟着**内容**走，不该跟着**位置**走。 */
+        const all = JSON.stringify(j.messages);
+        const out = /表达体检/.test(all) ? sc.checkup
+          : /先出题让他自己判断/.test(all) ? sc.q : sc.r;
         window.__onHttp(id, JSON.stringify({
           status: 200,
           body: JSON.stringify({ choices: [{ message: { content: JSON.stringify(out) } }] }),
@@ -126,8 +130,11 @@ const REPLAY_R = {
   chk('出题这一步跑通了',
     !/没能完成/.test(rp1.out) && /字面意思/.test(rp1.out),
     rp1.out.slice(-90));
+  /* 断言的是「那句话在提示词里」，不是「它在 messages[0]」。
+     2.42 把任务说明从 system 挪到了记录后面（为了让两次调用共用前缀、拿到缓存价），
+     位置是允许变的；但这句话本身必须还在——那才是这条断言守的东西。 */
   chk('出题用的是出题那份提示词',
-    /先出题让他自己判断/.test(rp1.reqs[rp1.reqs.length - 1].messages[0].content));
+    /先出题让他自己判断/.test(JSON.stringify(rp1.reqs[rp1.reqs.length - 1].messages)));
   chk('出题没有走 /api/ai/*',
     (await p.evaluate(() => (window.__fetchApi || []).length)) === 0);
 
@@ -146,7 +153,7 @@ const REPLAY_R = {
   });
   chk('揭晓这一步也跑通了', /分水岭|判断对了|承接情绪/.test(rp2.out), rp2.out.slice(-90));
   chk('揭晓用的是揭晓那份提示词，且额度 5000',
-    rp2.reqs[rp2.reqs.length - 1].messages[0].content.includes('已经先自己答过一遍')
+    JSON.stringify(rp2.reqs[rp2.reqs.length - 1].messages).includes('已经先自己答过一遍')
       && rp2.reqs[rp2.reqs.length - 1].max_tokens === 5000,
     String(rp2.reqs[rp2.reqs.length - 1].max_tokens));
   chk('两个模块全程都没有一个 /api/ 请求', rp2.fetchApi.length === 0, rp2.fetchApi.join(', '));

@@ -565,6 +565,10 @@ async function llmCall(messages, opts) {
      实测结果是模型回了一个 JSON 对象（于是 reply 是空的），或者干脆回空。
      以前那个参数是无条件带的，所以这一条必须显式关掉。 */
   let noFormat = !!o.noFormat;
+  /* 第一次请求到底带没带 response_format。重试逻辑和报错文案都要用它：
+     本来就是白话模式的（hint / OCR），重试不可能改变请求，所以不重试，
+     报错时也不许说「换过形状」——那是一句会被用户照着去排查的假话。 */
+  const startedWithFormat = !noFormat;
   let truncRetried = false;
   let lastEmpty = null;
 
@@ -587,8 +591,16 @@ async function llmCall(messages, opts) {
       }
       if (e.empty) {
         lastEmpty = e;
-        if (attempt === 0) {
-          /* 只重试一次，而且那一次**换个形状**（去掉 response_format）。
+        /* 只有「还能换个形状」的时候才值得重试。
+         *
+         * hint（接话提示）和 OCR 本来就是 noFormat——它们第一次就已经不带
+         * response_format 了。对这两条路，「换个形状再试」实际发出的是**一模一样的请求**：
+         * 同样的输入、同样的参数，对"偶发空返回"没有任何帮助，
+         * 只是多花一倍的钱和时间，而且会让下面那句提示变成假话
+         * （它说"第二次去掉了 response_format"，那两次其实都没带）。
+         * 所以这两种情况直接如实报错——真正有效的那一步是用户再点一次。 */
+        if (attempt === 0 && !noFormat) {
+          /* 只重试一次，而且那一次**真的换了形状**（去掉 response_format）。
              为什么不是重试三次：第二、三次会是一模一样的请求，
              对"偶发空返回"没有额外帮助，只是多花用户的钱和时间。
              两种形状都空，就如实报错并让他再点一次（那才是真正有效的那一步）。 */
@@ -596,12 +608,12 @@ async function llmCall(messages, opts) {
           toast('模型这次没给出内容（官方文档承认 JSON 模式会偶发这种情况），换个方式再试一次');
           continue;
         }
-        throw emptyContentError(e, budget);
+        throw emptyContentError(e, budget, startedWithFormat);
       }
       throw e;      // 其它错误（网络/密钥/地址/400）原样上抛，不重试
     }
   }
-  throw emptyContentError(lastEmpty, budget);   // 理论上到不了，兜一下
+  throw emptyContentError(lastEmpty, budget, startedWithFormat);   // 理论上到不了，兜一下
 }
 
 /** 空内容最终失败时的那句话。
@@ -609,7 +621,7 @@ async function llmCall(messages, opts) {
  *  方向错了：这件事跟模型名无关，用户照着改了也不会好。
  *  现在把真正能用的信息给他：发生了什么、官方怎么说、下一步做什么，
  *  以及一行可以拿去问我的原始返回。 */
-function emptyContentError(e, budget) {
+function emptyContentError(e, budget, changedShape) {
   const d = e.diag || {};
   const lines = [
     '模型这次没有返回内容（连着换了两种问法都没给）。',
@@ -618,7 +630,9 @@ function emptyContentError(e, budget) {
     '下一步：直接再点一次通常就好。如果连着好几次都这样，把这行原文发我：',
     `  模型 ${d.model || '?'} · 端点 ${d.url || '?'} · finish_reason ${d.finish || '?'}`,
     `  prompt ${d.prompt || 0} tokens · 输出 ${d.completion || 0} tokens · `
-    + `额度 ${budget} · 推理 ${d.reasoning || 0} 字 · 第二次去掉了 response_format`,
+    + `额度 ${budget} · 推理 ${d.reasoning || 0} 字 · 这次${
+      changedShape ? '换过形状（第二次去掉了 response_format）'
+        : '没重试（本来就是白话模式，重试只会发出同样的请求，所以没必要再花一次钱）'}`,
   ];
   if (d.reasoning > 0) {
     lines.splice(2, 0, '（这一次模型只写了推理、没写正文，多半是推理把额度吃掉了——'
@@ -2656,7 +2670,7 @@ function setSectionHtml() {
     <p class="set-note" style="margin-top:12px">${backupStatusText()}</p>`;
   if (setSection === 'about') return `
     <div class="set-h">关于</div>
-    <p class="set-note">版本 2.41（versionCode 43）· 离线可用 · 权限 6 个
+    <p class="set-note">版本 2.42（versionCode 44）· 离线可用 · 权限 6 个
     （网络、通知、开机自启、悬浮窗，加两个只对 Android 8 及以下生效的存储权限）。
     <b>没有录音权限</b>：这一版起 App 不录音了，你打字，她出声。安装包约 0.5 MB。</p>
     <p class="set-note">密钥只存在这台手机的本地存储里，不会上传到任何地方，
