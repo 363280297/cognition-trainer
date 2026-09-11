@@ -2670,7 +2670,7 @@ function setSectionHtml() {
     <p class="set-note" style="margin-top:12px">${backupStatusText()}</p>`;
   if (setSection === 'about') return `
     <div class="set-h">关于</div>
-    <p class="set-note">版本 2.42（versionCode 44）· 离线可用 · 权限 6 个
+    <p class="set-note">版本 2.43（versionCode 45）· 离线可用 · 权限 6 个
     （网络、通知、开机自启、悬浮窗，加两个只对 Android 8 及以下生效的存储权限）。
     <b>没有录音权限</b>：这一版起 App 不录音了，你打字，她出声。安装包约 0.5 MB。</p>
     <p class="set-note">密钥只存在这台手机的本地存储里，不会上传到任何地方，
@@ -3260,9 +3260,16 @@ async function testLlm() {
 const VISION_MODEL = 'deepseek-v4-flash-vision-exp';
 /* 一张图最长的一边缩到多少。1400 是个折中：手机截图的文字在这个尺寸下还很清楚，
    而 base64 之后通常只有一两百 KB，过 JS 桥和上传都不费劲。 */
-const SHOT_MAX_SIDE = 1400;
-/* 切成几段。3 段 × 每张 384 token ≈ 1150 token，可接受。 */
-const SHOT_MAX_PARTS = 3;
+/* 这三个值**必须和原生那边一致**（MainActivity 里的 SHOT_WIDTH_CAP / SHOT_PX_BUDGET /
+   SHOT_MAX_PARTS）。手机上切段是原生做的，这里是电脑上直接喂文件时走的同一条规则——
+   两边一旦不一致，就会出现「电脑上看着好好的、手机上糊成一片」，
+   而这个项目已经在「只有真机才炸」这类问题上吃过好几次亏。 */
+/* 宽度基本不动：字的清晰度由宽度决定，把宽度压掉就是压掉字。 */
+const SHOT_WIDTH_CAP = 1600;
+/* 一段的像素预算：官方会把图缩到「约 800×800」的量级，一段不超过它就不会被再缩。 */
+const SHOT_PX_BUDGET = 640000;
+/* 段数上限。一段一张图，太多会让请求又慢又贵，手机上原生 HTTP 还会 150 秒超时。 */
+const SHOT_MAX_PARTS = 13;
 /* 总 base64 的硬上限。超过就如实拒绝，而不是发一个几 MB 的请求去赌。 */
 const SHOT_TOTAL_LIMIT = 3.5 * 1024 * 1024;
 
@@ -3271,21 +3278,6 @@ function visionModelName() {
   return (s.visionModel || '').trim() || VISION_MODEL;
 }
 
-/** 把一张图缩到 maxSide 以内。返回 dataURL。 */
-function drawScaled(img, maxSide) {
-  const w0 = img.naturalWidth || img.width;
-  const h0 = img.naturalHeight || img.height;
-  const k = Math.min(1, maxSide / Math.max(w0, h0));
-  const w = Math.max(1, Math.round(w0 * k));
-  const h = Math.max(1, Math.round(h0 * k));
-  const c = document.createElement('canvas');
-  c.width = w; c.height = h;
-  const g = c.getContext('2d');
-  // 白底：聊天截图有的带透明，直接存 JPEG 会把透明变黑，字看不清。
-  g.fillStyle = '#fff'; g.fillRect(0, 0, w, h);
-  g.drawImage(img, 0, 0, w, h);
-  return { dataUrl: c.toDataURL('image/jpeg', 0.82), w, h };
-}
 
 /**
  * 一张图 → 若干张（长图竖切）。
@@ -3298,12 +3290,17 @@ function drawScaled(img, maxSide) {
 function sliceTall(img) {
   const w0 = img.naturalWidth || img.width;
   const h0 = img.naturalHeight || img.height;
-  const ratio = h0 / Math.max(1, w0);
-  if (ratio <= 2.4) return [drawScaled(img, SHOT_MAX_SIDE)];   // 不长，不切
-  /* 想切的段数：让每段的高宽比落到 1.2~2.4 这个区间（约等于一屏多一点）。 */
-  let parts = Math.min(SHOT_MAX_PARTS, Math.max(2, Math.round(ratio / 1.8)));
-  parts = Math.max(1, Math.min(SHOT_MAX_PARTS, parts));
-  const k = Math.min(1, SHOT_MAX_SIDE / w0);
+  /* 2.43 改掉了原来那套「按最长边缩到 1400、最多 3 段」的规则。
+     它是这个 bug 的另一半：长截图的最长边是**高**，按最长边缩会把宽度压到 100px 上下
+     （1080×14572 → 104×1400，34px 的字剩 3.3px），字就彻底没了。
+     现在按「宽度基本不动 + 每段不超过像素预算 + 段数有上限」来切。 */
+  const outW = Math.min(w0, SHOT_WIDTH_CAP);
+  let bandH = Math.max(1, Math.floor(SHOT_PX_BUDGET / Math.max(1, outW)));
+  let parts = Math.ceil(h0 / bandH);
+  if (parts > SHOT_MAX_PARTS) parts = SHOT_MAX_PARTS;
+  if (parts < 1) parts = 1;
+  bandH = Math.ceil(h0 / parts);   // 均分，避免最后一段只剩一条缝
+  const k = Math.min(1, outW / w0);
   const w = Math.round(w0 * k);
   const out = [];
   const whole = document.createElement('canvas');
@@ -3311,7 +3308,7 @@ function sliceTall(img) {
   const wg = whole.getContext('2d');
   wg.fillStyle = '#fff'; wg.fillRect(0, 0, whole.width, whole.height);
   wg.drawImage(img, 0, 0, whole.width, whole.height);
-  const each = Math.ceil(whole.height / parts);
+  const each = bandH;
   for (let i = 0; i < parts; i++) {
     const y = i * each;
     const hh = Math.min(each, whole.height - y);
@@ -3429,11 +3426,18 @@ window.__onShot = function (payload) {
     if (typeof shotDone === 'function') shotDone(null, (payload && payload.why) || '没选到图片');
     return;
   }
-  loadImage(payload.dataUrl)
-    .then((im) => {
-      const parts = sliceTall(im);
-      return ocrChatShots(parts);
-    })
+  /* 手机上原生已经把图**切好段**了（见 MainActivity.shotToDataUrls：它按宽度保清晰度、
+     按段数上限切横段，并逐段解码以免 OOM）。所以这里**不要再切一次**——
+     再切一遍只会把已经切好的小段又切开，白白多几张图。
+     兼容单张的老形状（dataUrl 字符串），那条路只有旧代码/测试会走。 */
+  const parts = Array.isArray(payload.dataUrls)
+    ? payload.dataUrls.filter(Boolean).map((du, i, arr) => ({ dataUrl: du, part: i + 1, parts: arr.length }))
+    : null;
+  const chain = parts && parts.length
+    ? Promise.resolve(parts)
+    : loadImage(payload.dataUrl).then((im) => sliceTall(im));
+  chain
+    .then((ps) => ocrChatShots(ps))
     .then((r) => { if (typeof shotDone === 'function') shotDone(r, null); })
     .catch((e) => { if (typeof shotDone === 'function') shotDone(null, e.message); });
 };

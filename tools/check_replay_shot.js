@@ -158,28 +158,47 @@ const TRANSCRIPT = '我：在忙，晚点说\n对方：哦，那你忙吧\n对�
 
   console.log('\n[三、长截图：必须切开，不能一张压糊]');
   await p.evaluate(() => { window.__calls = []; document.getElementById('rpChat').value = ''; });
-  const tall = makePng(700, 3500);   // 高宽比 5 → 该切成 3 段
+  const tall = makePng(700, 3500);   // 700×3500：按新规则会切成 4 段（每段 700×875）
+  await p.evaluate(() => { window.__srcW = 700; });   // 这张测试图的原宽
   await p.setInputFiles('#shotInput', [{ name: 'tall.png', mimeType: 'image/png', buffer: tall }]);
   await p.waitForTimeout(2500);
-  const c2 = await p.evaluate(() => {
+  const c2 = await p.evaluate(async () => {
     const c = window.__calls[0];
     if (!c) return { called: 0 };
     const u = c.m[1].content;
     const imgs = u.filter((x) => x.type === 'image_url');
+    /* 把每一段读回来看真实尺寸——断言要量的是「实际送出去的图是什么样」，
+       不是「我以为它切成了什么样」。 */
+    const dims = [];
+    for (const x of imgs) {
+      const im = new Image();
+      await new Promise((res, rej) => { im.onload = res; im.onerror = rej; im.src = x.image_url.url; });
+      dims.push({ w: im.naturalWidth, h: im.naturalHeight });
+    }
     return {
       called: 1, n: imgs.length,
       allJpeg: imgs.every((x) => /^data:image\/jpeg/.test(x.image_url.url)),
-      // 每段的像素高宽比应该落在 1.2~2.4，否则就是切得不合理
-      ratios: imgs.map((x) => {
-        const m = /base64,/.test(x.image_url.url);
-        return m ? 'jpeg' : '?';
-      }),
+      widths: dims.map((d) => d.w),
+      px: dims.map((d) => d.w * d.h),
+      srcW: window.__srcW || dims[0].w,   // 原图宽度，下面注入
       prompt: u[0].text,
       box: document.getElementById('rpChat').value,
     };
   });
   chk('长截图被切成多段（>1）', c2.called && c2.n > 1, `${c2.n} 张`);
-  chk('段数不超过上限 3（token 成本可控）', c2.n <= 3, String(c2.n));
+  /* 2.43 改掉了这条。原来是「段数不超过 3」——那是在给一个错误的规则上锁：
+     按最长边缩到 1400 + 最多 3 段，会把长截图的**宽度**压到 100px 上下
+     （1080×14572 → 104×1400，34px 的字剩 3.3px），字就没了。
+     现在要守的是三条真正决定「认不认得出来」的性质：
+       · 宽度没被压掉（这是那个 bug 的要害）；
+       · 每一段都在像素预算内，模型不会再缩它；
+       · 段数仍有上限（一段一张图，太多会又慢又贵）。 */
+  chk('长截图的宽度没被压掉（宽度决定字的清晰度）',
+    c2.widths.every((w) => w === c2.widths[0]) && c2.widths[0] === c2.srcW,
+    `原宽 ${c2.srcW}，各段宽 ${c2.widths.join('/')}`);
+  chk('每一段都在像素预算内（640k）',
+    c2.px.every((x) => x <= 640000), c2.px.join(' / '));
+  chk('段数仍在上限内（13）', c2.n <= 13, String(c2.n));
   chk('每一段都是 jpeg 的 dataURL', c2.allJpeg === true);
   chk('多图时提示词说明了「拼起来是完整记录」', /拼起来|按顺序/.test(c2.prompt || ''), c2.prompt);
   chk('长截图识别结果也填进去了', /在忙/.test(c2.box));

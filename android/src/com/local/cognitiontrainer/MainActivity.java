@@ -55,6 +55,14 @@ public class MainActivity extends Activity {
     private static final int REQ_NOTIF = 1002;
     private static final int REQ_STORAGE = 1003;
     private static final int REQ_MUSIC = 1004;     // 选一个音乐文件（ACTION_OPEN_DOCUMENT）
+    /* 截图那一条路的三个尺寸（2.43 定的，值和理由见 shotToDataUrls 的注释）：
+       · SHOT_WIDTH_CAP —— 宽度基本不动：字的清晰度由它决定
+       · SHOT_PX_BUDGET —— 一段的像素预算，超过就会被模型再缩一次
+       · SHOT_MAX_PARTS —— 段数上限：一段一张图，太多会让请求又慢又贵，手机上还会超时 */
+    private static final int SHOT_WIDTH_CAP = 1600;
+    private static final int SHOT_PX_BUDGET = 640000;
+    private static final int SHOT_MAX_PARTS = 13;
+
     private static final int REQ_SHOT = 1005;      // 选聊天截图（ACTION_OPEN_DOCUMENT image/*）
 
     /** 闸门服务把主界面拉起来时带这个 extra */
@@ -340,29 +348,47 @@ public class MainActivity extends Activity {
      * JSONObject.quote 会做转义，直接注入原文迟早被某个字符搞坏。代价是
      * 网页那边必须 JSON.parse 一道——于是漏了这一步就会静默失效，
      * 网页一律走"没数据"的分支。见 voice.js 的 bridgeObj()。 */
-    private void emitShot(boolean ok, String why, String dataUrl) {
+    private void emitShot(boolean ok, String why, java.util.List<String> dataUrls) {
         JSONObject o = new JSONObject();
         try {
             o.put("ok", ok);
-            if (ok) o.put("dataUrl", dataUrl); else o.put("why", why);
+            if (ok) o.put("dataUrls", new org.json.JSONArray(dataUrls)); else o.put("why", why);
         } catch (Exception ignored) { }
         js("window.__onShot&&window.__onShot(" + q(o.toString()) + ")");
     }
 
     /**
-     * 把选中的图读成 dataURL，顺便**降采样**。
+     * 把选中的图**切成若干段**，每段一个 dataURL。
      *
-     * 为什么要在原生这边降，而不是把原图丢给网页：
-     *   一张手机截图的 PNG 通常一两 MB，base64 之后还要再涨三分之一。
-     *   那个字符串要先过 JS 桥、再进 JSON、再 POST 出去——白白多搬两趟。
-     *   而且模型那边反正会把图缩到「约 800×800」的量级，原图的分辨率本来就浪费掉了。
+     * ── 为什么必须切开，以及 2.43 修的那个 bug ──────────────────────
+     * 用户报的是「识图能力还是有点差，许多文字都识别不出来」，并提示「长截图切分有问题」。
+     * 他猜对了，而且问题的位置比切分更靠前：**是这一步在切分之前就把宽度压没了**。
      *
-     * 用 inSampleSize 先粗降（它只读必要的像素，不整张解码，几 MB 的图也不会 OOM），
-     * 再用 createScaledBitmap 精修到目标尺寸。全程只用框架自带的 BitmapFactory，
-     * **不引入任何原生库**——build_apk.py 里那条「包里一个 lib/ 都不能有」的断言
-     * 还得成立。
+     * 原来的写法是 `shotToDataUrl(u, 1400)`：把图缩到「最长边 1400」。普通截图是竖的，
+     * 最长边就是**高**，于是宽度被一起压掉。算一下就清楚了（34px 的正文，实测值）：
+     *     1080×2400  普通截图  → 630×1400，字剩 19.8px（勉强，所以"有些字"认不出）
+     *     1080×7334  长截图    → 206×1400，字剩  6.5px
+     *     1080×14572 长截图    → 104×1400，字剩  3.3px ← 这个尺寸不可能认得出来
+     * 长截图越长的部分是**高**，所以"按最长边缩"对长截图的惩罚恰好最重——
+     * 而长截图正是这个功能最该处理好的输入。
+     *
+     * ── 现在的做法 ───────────────────────────────────────────────
+     *   1. **宽度基本不动**（只在上限处收），因为字的清晰度由宽度决定；
+     *   2. 竖着切成若干**横段**，每段单独作为一张图送出去；
+     *   3. 每段的高度按「模型的像素预算」定：官方会把图缩到约 800×800 的量级，
+     *      所以一段只要不超过那个像素数，就**不会被再缩**，字原样保住；
+     *   4. 段数有上限（13）：一段一张图，太多会让请求又慢又贵，
+     *      而手机上原生 HTTP 的超时是 150 秒。段数顶到上限时接受模型侧再缩一点
+     *      （14572 高时约缩到 0.73，字从 34px 到 24px——比原来的 3.3px 好太多）。
+     *
+     * ── 为什么用 BitmapRegionDecoder ─────────────────────────────
+     * 它**逐段解码**：只把当前这一段的像素读进内存，不会为了切一段而整张解码。
+     * 1080×14572 整张解码是 63 MB（ARGB_8888），加上白底副本就是 126 MB，
+     * 在这种机器上迟早 OOM。而一段 1080×1121 只有 4.8 MB。
+     * 它也是框架自带的（API 10+），不引入任何原生库——
+     * build_apk.py 里那条「包里一个 lib/ 都不能有」的断言仍然成立。
      */
-    private String shotToDataUrl(Uri u, int maxSide) throws Exception {
+    private java.util.List<String> shotToDataUrls(Uri u) throws Exception {
         android.graphics.BitmapFactory.Options bounds = new android.graphics.BitmapFactory.Options();
         bounds.inJustDecodeBounds = true;
         InputStream in1 = getContentResolver().openInputStream(u);
@@ -371,42 +397,64 @@ public class MainActivity extends Activity {
         int w0 = bounds.outWidth, h0 = bounds.outHeight;
         if (w0 <= 0 || h0 <= 0) throw new Exception("这张图读不出尺寸（可能不是常见图片格式）");
 
-        int want = Math.max(w0, h0) > maxSide ? maxSide : Math.max(w0, h0);
-        android.graphics.BitmapFactory.Options opt = new android.graphics.BitmapFactory.Options();
-        int sample = 1;
-        while (Math.max(w0, h0) / (sample * 2) >= want) sample *= 2;
-        opt.inSampleSize = sample;
-        opt.inPreferredConfig = android.graphics.Bitmap.Config.ARGB_8888;
+        // 目标宽度：普通手机截图（1080 上下）原样不动，只有特别宽的才收
+        int outW = Math.min(w0, SHOT_WIDTH_CAP);
+        // 一段多高：先按「模型不会再把这段缩小」的像素预算算
+        int bandH = Math.max(1, SHOT_PX_BUDGET / Math.max(1, outW));
+        // 段数超上限就把段拉高（宁可让模型少缩一点，也不能发二三十张图出去）
+        int parts = (int) Math.ceil(h0 / (double) bandH);
+        if (parts > SHOT_MAX_PARTS) parts = SHOT_MAX_PARTS;
+        if (parts < 1) parts = 1;
+        // 均分，避免最后一段只剩一条缝
+        bandH = (int) Math.ceil(h0 / (double) parts);
+
+        java.util.List<String> out = new java.util.ArrayList<>();
         InputStream in2 = getContentResolver().openInputStream(u);
-        android.graphics.Bitmap bm = android.graphics.BitmapFactory.decodeStream(in2, null, opt);
-        if (in2 != null) in2.close();
-        if (bm == null) throw new Exception("这张图解不开");
-
-        // 精修到目标尺寸（inSampleSize 只能按 2 的幂降，可能还偏大）
-        int mw = Math.max(bm.getWidth(), bm.getHeight());
-        if (mw > maxSide) {
-            float k = (float) maxSide / mw;
-            android.graphics.Bitmap small = android.graphics.Bitmap.createScaledBitmap(
-                    bm, Math.max(1, Math.round(bm.getWidth() * k)),
-                    Math.max(1, Math.round(bm.getHeight() * k)), true);
-            if (small != bm) bm.recycle();
-            bm = small;
+        android.graphics.BitmapRegionDecoder dec = null;
+        try {
+            dec = android.graphics.BitmapRegionDecoder.newInstance(in2, false);
+            if (dec == null) throw new Exception("这张图打不开（解码器不支持）");
+            android.graphics.BitmapFactory.Options opt = new android.graphics.BitmapFactory.Options();
+            opt.inPreferredConfig = android.graphics.Bitmap.Config.ARGB_8888;
+            for (int y = 0; y < h0; y += bandH) {
+                int hh = Math.min(bandH, h0 - y);
+                if (hh <= 8) break;
+                android.graphics.Bitmap band = dec.decodeRegion(
+                        new android.graphics.Rect(0, y, w0, y + hh), opt);
+                if (band == null) continue;
+                out.add(encodeFlat(band, outW));
+            }
+        } finally {
+            if (dec != null) dec.recycle();
+            if (in2 != null) in2.close();
         }
+        if (out.isEmpty()) throw new Exception("这张图切不出内容");
+        return out;
+    }
 
-        /* 铺一层白底再压 JPEG：截图有的带透明通道，直接压 JPEG 会把透明
-           变成黑色，白底黑字就反过来了，OCR 直接废掉。 */
+    /** 铺白底（截图可能带透明，直接压 JPEG 会变黑，白底黑字就反了）→ 必要时缩宽 → JPEG → dataURL。 */
+    private String encodeFlat(android.graphics.Bitmap src, int outW) {
+        int w = src.getWidth(), h = src.getHeight();
         android.graphics.Bitmap flat = android.graphics.Bitmap.createBitmap(
-                bm.getWidth(), bm.getHeight(), android.graphics.Bitmap.Config.ARGB_8888);
+                w, h, android.graphics.Bitmap.Config.ARGB_8888);
         android.graphics.Canvas cv = new android.graphics.Canvas(flat);
         cv.drawColor(android.graphics.Color.WHITE);
-        cv.drawBitmap(bm, 0, 0, null);
-        bm.recycle();
+        cv.drawBitmap(src, 0, 0, null);
+        src.recycle();
+
+        if (outW > 0 && w > outW) {
+            float k = (float) outW / w;
+            android.graphics.Bitmap small = android.graphics.Bitmap.createScaledBitmap(
+                    flat, outW, Math.max(1, Math.round(h * k)), true);
+            if (small != flat) flat.recycle();
+            flat = small;
+        }
 
         java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
         flat.compress(android.graphics.Bitmap.CompressFormat.JPEG, 82, bos);
         flat.recycle();
-        byte[] bytes = bos.toByteArray();
-        String b64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP);
+        String b64 = android.util.Base64.encodeToString(
+                bos.toByteArray(), android.util.Base64.NO_WRAP);
         return "data:image/jpeg;base64," + b64;
     }
 
@@ -993,8 +1041,8 @@ public class MainActivity extends Activity {
                不该让这个 App 长期握着你相册里某张图的读取权。 */
             new Thread(() -> {
                 try {
-                    String dataUrl = shotToDataUrl(u, 1400);
-                    emitShot(true, null, dataUrl);
+                    java.util.List<String> urls = shotToDataUrls(u);
+                    emitShot(true, null, urls);
                 } catch (Throwable t) {
                     emitShot(false, "读图失败：" + t.getMessage(), null);
                 }
