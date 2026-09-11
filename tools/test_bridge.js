@@ -440,6 +440,30 @@ t('守夜脚本只追加、不覆盖别人的无障碍服务',
   /\$cur:\$SVC/.test(watchSh) && /settings get secure enabled_accessibility_services/.test(watchSh),
   '先读列表，缺了才用 : 追加');
 
+/* 守夜脚本只允许在用户自己开过它之后启动。
+   两个原生入口（网页开关、无障碍服务连上）都必须先查那个开关——没开过就绝不碰 root。
+   尤其是 GateService 那个入口：它是**开机自动触发**的，不加判断就等于给所有人
+   默认开了一个 root 循环，那就成了流氓软件。 */
+const startSites = rawCode.filter(({ s }) => /GateWatch\.start\(/.test(s));
+const unguarded = startSites.filter(({ s }) => {
+  // 看启动点前面 300 个字符里有没有那个开关：网页开关走 want，服务走 Prefs.gateWatch
+  const before = s.slice(Math.max(0, s.indexOf('GateWatch.start(') - 300), s.indexOf('GateWatch.start('));
+  return !/want|gateWatch|Prefs\.gateWatch/.test(before);
+});
+t('只有用户开过防掉线才会去启动它（每个入口都先查开关）',
+  startSites.length > 0 && unguarded.length === 0,
+  startSites.length === 0 ? '没有任何地方启动它（功能是死的）'
+    : (unguarded.length ? `没查开关就启动：${unguarded.map((x) => x.f).join(', ')}`
+      : `启动点：${startSites.map((x) => x.f).join(', ')}`));
+
+/* 无障碍服务连上时顺手带起守夜循环——这条堵的是「重启之后又被划掉」那个缺口：
+   无障碍服务是持久化的、开机系统会自己连上，而守夜循环故意不做开机自启，
+   所以不在这里补一刀，重启后第一次划掉就又没人装回来了。 */
+t('无障碍服务连上时会把守夜循环带起来（堵重启之后的缺口）',
+  /onServiceConnected[\s\S]{0,900}GateWatch\.start\(/.test(gateBody)
+  && /Prefs\.gateWatch\(this\)/.test(gateBody),
+  'onServiceConnected 里先查 Prefs.gateWatch 再启动');
+
 /* 外部存储只写一个纯文本 .json 备份 */
 const backupSrc = (rawCode.find((x) => x.f === 'BackupStore.java') || {}).s || '';
 t('外部存储只写一个纯文本 .json 备份',

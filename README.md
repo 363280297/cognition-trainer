@@ -903,7 +903,7 @@ root 必须是一次性的 `ProcessBuilder` 调用」，理由是「那样脚本
 |---|---|
 | 包名 | `com.local.cognitiontrainer` |
 | 应用名 | 认知训练 |
-| versionCode / versionName | 41 / 2.39 |
+| versionCode / versionName | 42 / 2.40 |
 | minSdk / targetSdk | 26（Android 8.0+） / 34 |
 | 权限 | `INTERNET`、`POST_NOTIFICATIONS`、`RECEIVE_BOOT_COMPLETED`、`SYSTEM_ALERT_WINDOW`；另有 `WRITE/READ_EXTERNAL_STORAGE`，带 `maxSdkVersion=28`（新系统上不会被请求）。**没有 `RECORD_AUDIO`** |
 | 体积 | 约 0.5 MB（不需要任何 native 库） |

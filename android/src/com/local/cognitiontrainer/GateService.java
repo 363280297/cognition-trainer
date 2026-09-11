@@ -242,6 +242,21 @@ public class GateService extends AccessibilityService {
     protected void onServiceConnected() {
         super.onServiceConnected();
         getSharedPreferences(Prefs.NAME, MODE_PRIVATE).edit().putBoolean("service_on", true).apply();
+
+        // 顺手把「防掉线」的守夜循环确认一遍。
+        //
+        // 为什么放在这儿：这个回调**开机后系统会自己调一次**（无障碍服务是持久化的）。
+        // 而守夜循环是故意不做开机自启的（不往系统里写东西），所以重启之后它是没了的状态——
+        // 这时候用户再划掉应用，闸门就没人装回来了。让服务每次连上就顺手把它带起来，
+        // 正好把那个缺口堵上，而且不需要任何新的持久化。
+        //
+        // 只在用户自己开过它的时候做（Prefs.gateWatch）；没开过就绝不去碰 root。
+        // 必须开线程：su 的授权框可能在等人点，卡住这个回调会让后面的窗口事件全收不到。
+        if (Prefs.gateWatch(this)) {
+            new Thread(() -> {
+                try { GateWatch.start(GateService.this); } catch (Exception ignored) { }
+            }, "eq-gate-watch-boot").start();
+        }
     }
 
     @Override
