@@ -252,21 +252,53 @@ console.log('\n微课：');
       /Giovanetti/.test(w) && /Kross/.test(w));
   }
 
-  /* 「内容判读」系列（j01-j04）存在的理由是**把筛子交给他**，不是再给他一批内容。
+  /* 「内容判读」系列（j01-j03）存在的理由是**把筛子交给他**，不是再给他一批内容。
    * 它唯一的失效方式，是以后有人往里加课时按"再多讲一条道理"来写——那样它就从
    * 筛子退化成了内容，而内容这个东西本来就是他要学会挑的。
    * 所以钉三条：系列齐全、每课都落在「判据」上、每课都写了自己的适用边界。 */
   const judge = lessons.filter((l) => l.series === '内容判读');
-  t('内容判读系列四课齐全（j01-j04）',
-    ['j01', 'j02', 'j03', 'j04'].every((id) => judge.some((l) => l.id === id)),
+  t('内容判读系列三课齐全（j01-j03）',
+    ['j01', 'j02', 'j03'].every((id) => judge.some((l) => l.id === id)),
     judge.map((l) => l.id).join(','));
   const noCrit = judge.filter((l) => !/判据/.test(l.read + l.warn + l.apply.why));
-  t('每课都落在「判据」上，不是只给结论或台词', judge.length >= 4 && noCrit.length === 0,
+  t('每课都落在「判据」上，不是只给结论或台词', judge.length >= 3 && noCrit.length === 0,
     noCrit.length ? noCrit.map((l) => l.id).join(',') : `${judge.length} 课都点了判据`);
   const noEdge = judge.filter((l) => !/这一课|这个应用|本应用/.test(l.warn));
   t('每课都写了自己的适用边界（warn 里要自己提到这一课 / 这个应用）',
-    judge.length >= 4 && noEdge.length === 0,
+    judge.length >= 3 && noEdge.length === 0,
     noEdge.length ? noEdge.map((l) => l.id).join(',') : `${judge.length} 课都有`);
+
+  /* 用户退掉的那一课：j04「看它靠什么赚钱」。
+   * 他的原话是「我都不需要做那什么挣钱，我是需要让我变成一个更好更完美的男人。
+   * 有责任懂得与家人朋友，伴侣相处的人，你怎么教上我挣钱了？」
+   * ——他说得对。那一课不管怎么解释「我是教你判断建议的动机」，落点都在对方的
+   * 商业模式上，而他要学的是怎么对人。**这是被明确退掉的内容，不能悄悄涨回来。** */
+  t('j04（看它靠什么赚钱）已经摘掉，没有留空壳', !lessons.some((l) => l.id === 'j04'));
+  t('没有一课的标题落在「挣钱 / 变现 / 流量 / 生意」上',
+    lessons.every((l) => !/(赚钱|挣钱|变现|流量|生意|营销)/.test(l.title)),
+    lessons.filter((l) => /(赚钱|挣钱|变现|流量|生意|营销)/.test(l.title)).map((l) => l.title).join('; '));
+
+  /* 「责任与相处」（d01-d03）。他说的三样——有责任、家人、朋友——在加这三课之前
+   * 是**0 课**（查过：讲家人/父母 0、讲责任/说到做到 0、讲朋友 0），而当时我往里
+   * 加了一课讲赚钱的。这一组钉住的是「他要的那三样必须在」。
+   * 最后一条尤其重要：讲家庭关系而不写「有毒的家庭不适用」，它就会被读成
+   * 「必须和家人亲近」的道德要求——那一句是内容的边界，不是修辞。 */
+  const duty = lessons.filter((l) => l.series === '责任与相处');
+  t('责任与相处系列三课齐全（d01 责任 / d02 家人 / d03 朋友）',
+    ['d01', 'd02', 'd03'].every((id) => duty.some((l) => l.id === id)),
+    duty.map((l) => l.id).join(','));
+  const dutyNoEdge = duty.filter((l) => !/这一课/.test(l.warn));
+  t('这三课也都写了自己的适用边界', duty.length >= 3 && dutyNoEdge.length === 0,
+    dutyNoEdge.length ? dutyNoEdge.map((l) => l.id).join(',') : `${duty.length} 课都有`);
+  const d02 = lessons.find((l) => l.id === 'd02');
+  t('讲家人那一课保留了「有些家庭关系的正确答案是距离」这条边界',
+    !!d02 && /有毒|距离/.test(d02.warn) && /不适用/.test(d02.warn));
+  const d01 = lessons.find((l) => l.id === 'd01');
+  t('讲责任那一课保留了「做不到有时不是人品问题」（不能拿去审判别人）',
+    !!d01 && /执行功能|不是人品/.test(d01.warn));
+  const d03 = lessons.find((l) => l.id === 'd03');
+  t('讲朋友那一课保留了「这不是怎么用技巧让人喜欢你」这条分界线',
+    !!d03 && /操控/.test(d03.warn) && /不是「怎么用技巧/.test(d03.warn));
 }
 
 console.log('\n阶段与现实任务：');

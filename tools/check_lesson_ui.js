@@ -50,7 +50,7 @@ const chk = (l, c, e) => { console.log(`  ${c ? 'PASS' : 'FAIL'}  ${l}${e ? '  �
   const series = [...new Set(DATA.lessons.map((l) => l.series))];
   chk('筛选条里每个系列都在（含这一轮新加的「内容判读」）',
     series.every((s) => list.chips.includes(s)), list.chips.join(' / '));
-  chk('默认「全部」下把 37 课都列出来', list.n === DATA.lessons.length,
+  chk(`默认「全部」下把 ${DATA.lessons.length} 课都列出来`, list.n === DATA.lessons.length,
     `${list.n} 条 vs 数据 ${DATA.lessons.length} 课`);
 
   console.log('\n[二、内容判读：切过去看]');
@@ -66,8 +66,8 @@ const chk = (l, c, e) => { console.log(`  ${c ? 'PASS' : 'FAIL'}  ${l}${e ? '  �
     };
   }, '内容判读');
   const jTitles = jv.rows.map((r) => r.t);
-  chk('切到该系列之后只剩这 4 课', jv.rows.length === j.length, `${jv.rows.length} 条`);
-  chk('四课的标题都在列表里', j.every((l) => jTitles.some((t) => t.includes(l.title))),
+  chk('切到该系列之后只剩这个系列自己的课', jv.rows.length === j.length, `${jv.rows.length} 条 / 该系列 ${j.length} 课`);
+  chk('这个系列每课的标题都在列表里', j.every((l) => jTitles.some((t) => t.includes(l.title))),
     j.map((l) => l.id).join(','));
   chk('列表里能看到「未读」（还没点过）', jTitles.every((t) => /未读/.test(t)));
   /* 系列说明是这一轮新加的：没有它，用户点进这个系列不知道它是干什么的 */
@@ -75,8 +75,11 @@ const chk = (l, c, e) => { console.log(`  ${c ? 'PASS' : 'FAIL'}  ${l}${e ? '  �
     jv.note.length > 20 && /筛|判据|值得信/.test(jv.note), jv.note.slice(0, 40));
 
   console.log('\n[三、每一课都打得开、渲染都对]');
-  // 四课逐课走一遍真实入口：列表点进去 → 看正文/边界/选项
-  for (const l of j) {
+  /* 这一节把本轮新增/改动的两个系列逐课走一遍真实入口：列表点进去 → 看正文/边界/选项。
+   * 全库 39 课都走一遍会刷出一百多行、把真问题冲掉，所以挑这两个系列——
+   * 它们的正文里都有 `**` 加粗和长 warn，是最容易出渲染问题的那一类。 */
+  const duty = DATA.lessons.filter((l) => l.series === '责任与相处');
+  for (const l of [...j, ...duty]) {
     const r = await p.evaluate((id) => {
       document.querySelectorAll('.sheet').forEach((s) => s.remove());
       openLesson(id);
@@ -99,7 +102,7 @@ const chk = (l, c, e) => { console.log(`  ${c ? 'PASS' : 'FAIL'}  ${l}${e ? '  �
       r.read.includes('**') || r.warn.includes('**') ? '有裸露的 **' : 'ok');
     chk(`${l.id}：适用边界那一块在，而且有内容`, /适用边界/.test(r.warn) && r.warn.length > 200,
       r.warn.length + ' 字');
-    chk(`${l.id}：标了系列和证据强度`, r.tag.includes('内容判读') && r.tag.length === 2, r.tag.join('/'));
+    chk(`${l.id}：标了系列和证据强度`, r.tag.includes(l.series) && r.tag.length === 2, r.tag.join('/'));
     chk(`${l.id}：四道选项都在，题面也在`,
       r.n === 4 && r.labels.every((x) => x.length > 4) && r.labels[0].startsWith('A'),
       `${r.n} 个选项`);
@@ -162,7 +165,7 @@ const chk = (l, c, e) => { console.log(`  ${c ? 'PASS' : 'FAIL'}  ${l}${e ? '  �
     /已读/.test(row02.t) && /应用题答对/.test(row02.t), row02.t.slice(0, 46));
   /* 打开过就算已读（上面四课都点过一次），但**答过题的只有 j02**。
    * 这一条守的是「记录不会串台」：applyCorrect 不该泄漏到没答过的那三课上。 */
-  chk('四课都记成已读，但只有答过的那一课带应用题结果',
+  chk('打开过的课都记成已读，但只有答过的那一课带应用题结果',
     back.rows.every((r) => /已读/.test(r.t)) &&
       back.rows.filter((r) => /应用题/.test(r.t)).length === 1,
     back.rows.map((r) => r.id + (/应用题/.test(r.t) ? '(答)' : '')).join(' '));
