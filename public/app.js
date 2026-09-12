@@ -2453,7 +2453,7 @@ function renderStages() {
       </div>
       <div class="row">
         ${dpv.met
-          ? `<button class="ghost" onclick="goPracticeCards()">加练一会儿</button>`
+          ? `<button class="ghost" onclick="openExtraPractice()">加练一会儿</button>`
           : `<button class="primary" onclick="closeGate();goPracticeCards()">现在做</button>`}
         <button class="plain" onclick="openDailySettings()">设置</button>
       </div>
@@ -2727,7 +2727,7 @@ function todoRow(name, have, need, unit, met) {
 
 /** 按钮直接说下一步做什么，而不是「还差 N 步」——后者是个数字，不是个动作。 */
 function nextAction(p) {
-  if (p.met) return { label: '加练一会儿', fn: "goPracticeCards()" };
+  if (p.met) return { label: '加练一会儿', fn: "openExtraPractice()" };
   if (p.cards < p.tg.cards) {
     const rem = p.tg.cards - p.cards;
     return { label: `开始做卡片（还差 ${rem} 张判对）`, fn: "closeGate();goPracticeCards()" };
@@ -3567,6 +3567,33 @@ function goPracticeCards() {
   practiceSubview = 'cards';
   cardsView = 'drill';
   showTab('practice');
+}
+
+function openExtraPractice() {
+  practiceSubview = 'extra';
+  showTab('practice');
+}
+
+function viewExtraPractice() {
+  const f = frameOfDay();
+  $('#view').innerHTML = `
+    <div class="extra-header">
+      <span class="section-icon" aria-hidden="true">+</span>
+      <div><span class="eyebrow">OPTIONAL PRACTICE</span><h2>加练</h2></div>
+    </div>
+    <p class="hint extra-intro">今天的必做量完成后，按需要再练一点。两种练法各练不同能力。</p>
+    <div class="extra-grid">
+      <button class="extra-choice" onclick="goPracticeCards()">
+        <span class="extra-icon extra-icon-card" aria-hidden="true">▣</span>
+        <span><strong>普通题</strong><small>练习判断、沟通和边界</small></span>
+        <span class="extra-arrow" aria-hidden="true">›</span>
+      </button>
+      ${f ? `<button class="extra-choice" onclick="renderFrame('lesson', true)">
+        <span class="extra-icon extra-icon-frame" aria-hidden="true">◆</span>
+        <span><strong>第六题</strong><small>${esc(f.dimension)} · 先读案例，再迁移到现实</small></span>
+        <span class="extra-arrow" aria-hidden="true">›</span>
+      </button>` : ''}
+    </div>`;
 }
 
 /* ============================================================ 信号场（小游戏）
@@ -4837,7 +4864,7 @@ function setAudioAsk(on) {
 /* 二级切换条只在 showTab() 里注入一次，而不是改十几个渲染函数各加一遍。
    这样新增子视图不用动任何已有代码。 */
 const SUBNAV = {
-  practice: () => subTabs([['cards', '卡片'], ['calib', '语境校准'], ['learn', '微课'],
+  practice: () => subTabs([['cards', '卡片'], ['extra', '加练'], ['calib', '语境校准'], ['learn', '微课'],
     ['signal', '信号场'], ['chat', '闲聊']],
     practiceSubview, 'setPracticeSubview'),
   ai: () => subTabs([['voice', '场景对话'], ['checkup', '表达体检'], ['replay', '真实复盘']],
@@ -4947,8 +4974,8 @@ function frameOfDay() {
   const pool=list.filter(x=>x.dimension===dim);
   return pool[day%pool.length]||list[day%list.length];
 }
-function renderFrame(mode='lesson') { const f=frameOfDay(); if(!f)return; const l=f.lesson||{}; if(mode==='quiz'){ $('#view').innerHTML=`<div class="frame-page"><div class="frame-head"><span class="tag dom">每日第六题</span><span class="tag">${esc(f.dimension)}</span></div><h2>${esc(f.title)}</h2><p class="frame-kicker">${esc(l.principle||'先看结构，再做判断。')}</p><p class="scene">${esc(f.case)}</p><p class="prompt">${esc(f.q)}</p><div class="opts">${f.options.map((x,i)=>`<button class="opt" onclick="answerFrame(${i})"><span class="k">${'ABCD'[i]}</span>${esc(x)}</button>`).join('')}</div></div>`; return; } $('#view').innerHTML=`<div class="frame-page"><div class="frame-head"><span class="tag dom">每日第六题</span><span class="tag">${esc(f.dimension)}</span></div><h2>${esc(f.title)}</h2><p class="frame-kicker">${esc(l.lead||'先看案例，再提炼结构。')}</p><div class="frame-lesson"><p>${esc(l.body||f.why)}</p><div class="frame-principle"><span>提炼出的原则</span><strong>${esc(l.principle||'先把表面事件拆成关系、资源和后果。')}</strong></div><p class="frame-transfer">${esc(l.transfer||'把这个原则带回现实，再看一道新案例。')}</p></div><button class="primary frame-start" onclick="renderFrame('quiz')">开始检验</button></div>`; }
-function answerFrame(i) { const f=frameOfDay(); if(!f)return; const ok=i===f.answer; state.daily.frame=1; state.frameSession={id:f.id,choice:i};
+function renderFrame(mode='lesson', extra=false) { const f=frameOfDay(); if(!f)return; state.frameSession = { id: f.id, extra: !!extra }; const l=f.lesson||{}; if(mode==='quiz'){ $('#view').innerHTML=`<div class="frame-page"><div class="frame-head"><span class="tag dom">每日第六题</span><span class="tag">${esc(f.dimension)}</span></div><h2>${esc(f.title)}</h2><p class="frame-kicker">${esc(l.principle||'先看结构，再做判断。')}</p><p class="scene">${esc(f.case)}</p><p class="prompt">${esc(f.q)}</p><div class="opts">${f.options.map((x,i)=>`<button class="opt" onclick="answerFrame(${i})"><span class="k">${'ABCD'[i]}</span>${esc(x)}</button>`).join('')}</div></div>`; return; } $('#view').innerHTML=`<div class="frame-page"><div class="frame-head"><span class="tag dom">每日第六题</span><span class="tag">${esc(f.dimension)}</span></div><h2>${esc(f.title)}</h2><p class="frame-kicker">${esc(l.lead||'先看案例，再提炼结构。')}</p><div class="frame-lesson"><p>${esc(l.body||f.why)}</p><div class="frame-principle"><span>提炼出的原则</span><strong>${esc(l.principle||'先把表面事件拆成关系、资源和后果。')}</strong></div><p class="frame-transfer">${esc(l.transfer||'把这个原则带回现实，再看一道新案例。')}</p></div><button class="primary frame-start" onclick="renderFrame('quiz', extra)">开始检验</button></div>`; }
+function answerFrame(i) { const f=frameOfDay(); if(!f)return; const ok=i===f.answer; const extra = !!(state.frameSession && state.frameSession.id === f.id && state.frameSession.extra); if (extra) bumpDaily('extra'); else state.daily.frame=1; state.frameSession={id:f.id,choice:i,extra};
   state.frameStats=state.frameStats||{}; const z=state.frameStats[f.dimension]||{seen:0,correct:0}; z.seen=(z.seen||0)+1; if(ok)z.correct=(z.correct||0)+1; state.frameStats[f.dimension]=z;
   state.answers.push({t:Date.now(),id:'frame-'+f.id,dimension:f.dimension,err:ok?'正解':'五维分析偏差',ok}); save(); const l=f.lesson||{}; $('#view').innerHTML=`<div class="frame-page"><div class="frame-head"><span class="tag dom">${ok?'判断正确':'先看反馈'}</span><span class="tag">${esc(f.dimension)}</span></div><h2>${esc(f.title)}</h2><div class="frame-feedback ${ok?'is-good':'is-bad'}"><strong>${ok?'你抓住了关键关系。':'这次先记住结构，不急着背答案。'}</strong><p>${esc(f.why)}</p><div class="frame-principle"><span>回到原则</span><strong>${esc(l.principle||'先拆结构，再下结论。')}</strong></div><p class="frame-transfer">${esc(l.transfer||'把原则迁移到一个现实场景。')}</p></div><p class="frame-reflection">${esc(l.reflection||'你选择这个答案时，最先看到的是哪一层？')}</p><button class="primary" onclick="renderToday()">返回今天</button></div>`; toast(ok?'答对了':'先看解析'); }
 
@@ -4968,6 +4995,7 @@ const VIEWS = {
   today: renderToday,
   practice: () => {
     if (practiceSubview === 'cards') viewCards();
+    else if (practiceSubview === 'extra') viewExtraPractice();
     else if (practiceSubview === 'calib') viewCalib();
     else if (practiceSubview === 'signal') viewSignal();
     else if (practiceSubview === 'chat') viewChat();
