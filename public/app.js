@@ -4943,7 +4943,7 @@ function frameOfDay() {
      没有数据的维度先轮换，避免用户永远只被考同一类。 */
   const scored=dims.map((dim,i)=>{const z=stats[dim]||{};const seen=Number(z.seen)||0;const acc=seen?Number(z.correct||0)/seen:0;return {dim,i,score:(seen?1-acc:1.2)+(i/dims.length)*0.001};}).sort((a,b)=>b.score-a.score);
   const day=Number(new Date().toISOString().slice(0,10).replace(/-/g,''));
-  const dim=scored[day%Math.min(scored.length,3)].dim;
+  const dim=scored[day%scored.length].dim;
   const pool=list.filter(x=>x.dimension===dim);
   return pool[day%pool.length]||list[day%list.length];
 }
