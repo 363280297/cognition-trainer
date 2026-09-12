@@ -2724,13 +2724,15 @@ function todoRow(name, have, need, unit, met) {
 /** 按钮直接说下一步做什么，而不是「还差 N 步」——后者是个数字，不是个动作。 */
 function nextAction(p) {
   if (p.met) return { label: '加练一会儿', fn: "goPracticeCards()" };
-  if (p.d.frame < p.tg.frame) return { label: '做每日第六题', fn: 'renderFrame()' };
   if (p.cards < p.tg.cards) {
     const rem = p.tg.cards - p.cards;
     return { label: `开始做卡片（还差 ${rem} 张判对）`, fn: "closeGate();goPracticeCards()" };
   }
-  const rem = p.tg.lessons - p.lessons;
-  return { label: `去看微课（还差 ${rem} 条）`, fn: "closeGate();setPracticeSubview('learn')" };
+  if (p.lessons < p.tg.lessons) {
+    const rem = p.tg.lessons - p.lessons;
+    return { label: `去看微课（还差 ${rem} 条）`, fn: "closeGate();setPracticeSubview('learn')" };
+  }
+  return { label: '做每日第六题', fn: 'renderFrame()' };
 }
 
 /** 跨天了就重置今天的进度。每次读写 daily 之前都要先过一遍。 */
@@ -2743,7 +2745,7 @@ function rollDaily() {
       state.dailyLog = state.dailyLog || [];
       state.dailyLog.push({
         date: d.date, cards: d.cards || 0, lessons: d.lessons || 0,
-        extra: d.extra || 0, tried: d.tried || 0, frame: d.frame || 0, frame: d.frame || 0,
+        extra: d.extra || 0, tried: d.tried || 0, frame: d.frame || 0,
         met: !!d.met, skipped: !!d.skipped, fogPass: !!d.fogPass,
       });
       if (state.dailyLog.length > 400) state.dailyLog = state.dailyLog.slice(-400);

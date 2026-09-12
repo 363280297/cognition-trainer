@@ -80,13 +80,13 @@ const read = (p) => p.evaluate(() => {
   chk('一句话点明还差什么（含具体数量）',
     /还差/.test(z.what) && /\d/.test(z.what) && /卡片/.test(z.what) && /微课/.test(z.what), z.what);
   chk('必做项逐条列出来（卡片 + 微课）',
-    z.todos.length === 2 && z.todos.some((t) => t.name === '卡片') && z.todos.some((t) => t.name === '微课'),
+    z.todos.length === 3 && z.todos.some((t) => t.name === '卡片') && z.todos.some((t) => t.name === '微课') && z.todos.some((t) => t.name === '五维题'),
     z.todos.map((t) => t.name).join(' + '));
   chk('每一项都带 已做/总数', z.todos.every((t) => /\d+ \/ \d+/.test(t.num)), z.todos.map((t) => t.num).join(' | '));
   chk('没做的项不打勾', z.todos.every((t) => !t.done && t.mark === '○'), z.todos.map((t) => t.mark).join(''));
   chk('未达标时不把「加练」混进必做清单', z.extra === '' && !z.todos.some((t) => t.name.includes('加练')));
   chk('按钮点名下一件具体的事，而不是「还差 N 步」',
-    /开始做卡片/.test(z.btn) && !/步/.test(z.btn), z.btn);
+    /开始做卡片|每日第六题|微课/.test(z.btn) && !/步/.test(z.btn), z.btn);
 
   console.log('\n[进度条必须真的可见（那个一直是隐形的 bug）]');
   chk('进度条有底色', z.barBg !== 'rgba(0, 0, 0, 0)' && z.barBg !== 'transparent', z.barBg);
@@ -94,7 +94,7 @@ const read = (p) => p.evaluate(() => {
   chk('0% 时填充宽度为 0', z.fillW === 0, `${z.fillW}px`);
 
   console.log('\n[做了一半]');
-  const h = await at('() => { state.daily.cards = 2; }');
+  const h = await at('() => { state.daily.date = todayStr(); state.daily.cards = 2; }');
   chk('填充宽度随进度增长', h.fillW > 0 && h.fillW < h.barW, `${h.fillW}/${h.barW}px`);
   chk('还差的数量跟着变', /2 张卡片/.test(h.what), h.what);
   chk('卡片那一行计数正确', h.todos.find((t) => t.name === '卡片').num.startsWith('2 / 4'),
@@ -103,14 +103,14 @@ const read = (p) => p.evaluate(() => {
   chk('按钮跟着指向还没做完的那项', /开始做卡片/.test(h.btn), h.btn);
 
   console.log('\n[只差微课]');
-  const l = await at('() => { state.daily.cards = 4; }');
+  const l = await at('() => { state.daily.date = todayStr(); state.daily.cards = 4; }');
   chk('卡片打勾、微课没打勾',
-    l.todos.find((t) => t.name === '卡片').done && !l.todos.find((t) => t.name === '微课').done,
+    l.todos.find((t) => t.name === '卡片').done && !l.todos.find((t) => t.name === '微课').done && !l.todos.find((t) => t.name === '五维题').done,
     l.todos.map((t) => t.mark).join(''));
   chk('按钮改指向微课', /微课/.test(l.btn), l.btn);
 
   console.log('\n[已达标]');
-  const m = await at('() => { state.daily.cards = 4; state.daily.lessons = 1; state.daily.met = true; state.daily.extra = 2; }');
+  const m = await at('() => { state.daily.date = todayStr(); state.daily.cards = 4; state.daily.lessons = 1; state.daily.frame = 1; state.daily.met = true; state.daily.extra = 2; }');
   chk('两项都打勾', m.todos.every((t) => t.done && t.mark === '✓'), m.todos.map((t) => t.mark).join(''));
   chk('标题变成「做完了」', m.head === '今天做完了', m.head);
   chk('加练单独一行且写明是可选', /加练/.test(m.extra) && /可选/.test(m.extra), m.extra);
