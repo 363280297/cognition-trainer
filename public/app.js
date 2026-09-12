@@ -58,11 +58,12 @@ const DEFAULT_STATE = {
   // 依据：错过一次对习惯养成没有实质影响，但累积的错过会显著降低最终达到的
   // 自动化水平（Lally 等 2010）；真正杀死习惯的是「反正已经破了」的连锁反应
   // （what-the-hell effect，Marlatt & Gordon 的复发预防研究）。
-  daily: { date: null, cards: 0, lessons: 0, extra: 0, tried: 0, skipped: false, met: false, fogPass: false, metAt: null },
+  daily: { date: null, cards: 0, lessons: 0, frame: 0, extra: 0, tried: 0, skipped: false, met: false, fogPass: false, metAt: null },
   dailyLog: [],       // [{ date, cards, lessons, extra, met, skipped, fogPass }]
   // 护城河设置：达标之前不许打开的目标应用（由 JS 计算是否武装，原生只负责执行）
   // rootKnown / rootOk 是三态而不是布尔：null 表示「还没探测过」。
   // 压成 false 会把「未知」显示成「root 不可用」，那是误报。
+  frameSession: { id: null, choice: null },
   gate: { armed: false, packages: [], enabled: false,
           deepBlock: false, rootKnown: false, rootOk: false,
           // 防掉线：want 是「用户想不想开着」，running 是「心跳文件真的在跳吗」。
@@ -2676,7 +2677,7 @@ function dailyCfg() {
 
 function dailyTargets() {
   const t = dailyCfg().targets || {};
-  return { cards: t.cards || 4, lessons: t.lessons || 1 };
+  return { cards: t.cards || 4, lessons: t.lessons || 1, frame: 1 };
 }
 
 /* ---------------------------------------------------------- 今日任务的呈现
@@ -2723,6 +2724,7 @@ function todoRow(name, have, need, unit, met) {
 /** 按钮直接说下一步做什么，而不是「还差 N 步」——后者是个数字，不是个动作。 */
 function nextAction(p) {
   if (p.met) return { label: '加练一会儿', fn: "goPracticeCards()" };
+  if (p.d.frame < p.tg.frame) return { label: '做每日第六题', fn: 'renderFrame()' };
   if (p.cards < p.tg.cards) {
     const rem = p.tg.cards - p.cards;
     return { label: `开始做卡片（还差 ${rem} 张判对）`, fn: "closeGate();goPracticeCards()" };
@@ -2741,13 +2743,13 @@ function rollDaily() {
       state.dailyLog = state.dailyLog || [];
       state.dailyLog.push({
         date: d.date, cards: d.cards || 0, lessons: d.lessons || 0,
-        extra: d.extra || 0, tried: d.tried || 0,
+        extra: d.extra || 0, tried: d.tried || 0, frame: d.frame || 0, frame: d.frame || 0,
         met: !!d.met, skipped: !!d.skipped, fogPass: !!d.fogPass,
       });
       if (state.dailyLog.length > 400) state.dailyLog = state.dailyLog.slice(-400);
     }
     state.daily = {
-      date: t, cards: 0, lessons: 0, extra: 0, tried: 0,
+      date: t, cards: 0, lessons: 0, frame: 0, extra: 0, tried: 0,
       skipped: false, met: false, fogPass: false, metAt: null,
     };
   }
@@ -2759,8 +2761,8 @@ function dailyProgress() {
   const d = state.daily;
   const cards = Math.min(d.cards || 0, tg.cards);
   const lessons = Math.min(d.lessons || 0, tg.lessons);
-  const done = cards + lessons;
-  const need = tg.cards + tg.lessons;
+  const done = cards + lessons + Math.min(d.frame || 0, tg.frame);
+  const need = tg.cards + tg.lessons + tg.frame;
   return {
     d, tg,
     cards: d.cards || 0, lessons: d.lessons || 0, extra: d.extra || 0,
@@ -2822,6 +2824,8 @@ function bumpDaily(kind, counted = true) {
     }
     if ((d.cards || 0) >= tg.cards) d.extra = (d.extra || 0) + 1;
     d.cards = (d.cards || 0) + 1;
+  } else if (kind === 'frame') {
+    d.frame = 1;
   } else if (kind === 'lesson') {
     d.lessons = (d.lessons || 0) + 1;
   } else if (kind === 'extra') {
@@ -2829,7 +2833,7 @@ function bumpDaily(kind, counted = true) {
     // 静默什么都不做——加练计数永远是 0，而调用方以为记上了。
     d.extra = (d.extra || 0) + 1;
   }
-  if (!d.met && (d.cards >= tg.cards) && (d.lessons >= tg.lessons)) {
+  if (!d.met && (d.cards >= tg.cards) && (d.lessons >= tg.lessons) && (d.frame >= tg.frame)) {
     markDailyMet();
   } else {
     save();
@@ -2881,7 +2885,7 @@ function syncGate() {
       // 那时来不及回调网页问一遍，所以必须提前落盘在原生那边。
       const summary = dp.met
         ? '今天已达标。'
-        : `今天的量很小：还差 ${dp.need - dp.done} 步（卡片判对 ${dp.cards}/${dp.tg.cards} · 微课 ${dp.lessons}/${dp.tg.lessons}）。`
+        : `今天的量很小：还差 ${dp.need - dp.done} 步（卡片判对 ${dp.cards}/${dp.tg.cards} · 微课 ${dp.lessons}/${dp.tg.lessons} · 五维题 ${dp.d.frame || 0}/1）。`
           + '卡片要判对才算——点过去不算。';
       if (EQNative.setTrainingState) {
         EQNative.setTrainingState(g.enabled ? 1 : 0, dp.met ? 1 : 0, todayStr(),
@@ -4884,6 +4888,7 @@ function renderToday() {
       <div class="todo-list">
         ${todoRow('卡片', p.cards, p.tg.cards, (cfg.labels || {}).cards || '张卡片', p.met)}
         ${todoRow('微课', p.lessons, p.tg.lessons, (cfg.labels || {}).lessons || '条微课', p.met)}
+        ${todoRow('五维题', p.d.frame || 0, 1, '道', p.met)}
       </div>
       ${(!p.met && p.tried > p.cards) ? `<p class="hint" style="margin-top:8px">今天你答了 ${p.tried} 张，其中 <b>判对 ${p.cards} 张</b>。没判对的不算——护城河拦的就是「点过去」。判错了正好，那才是要练的地方。</p>` : ''}
 
@@ -4891,6 +4896,7 @@ function renderToday() {
 
       <div class="row">
         <button class="${p.met ? 'ghost' : 'primary'}" onclick="${nextAction(p).fn}">${nextAction(p).label}</button>
+        ${!p.d.frame ? '<button class="ghost" onclick="renderFrame()">做每日第六题</button>' : '<span class="tag tag-good">五维题已完成</span>'}
       </div>
       ${p.met ? '' : `<p class="hint">${esc((cfg.skipRule || {}).once || '')}${p.skipped ? ' 今天已经跳过一次了。' : ''}</p>`}
       ${!p.met && p.skipped ? `<div class="row"><button class="plain" onclick="openFog('每日计划')">脑雾通道</button></div>` : ''}
@@ -4922,6 +4928,10 @@ function renderToday() {
       </div>
     </div>`;
 }
+
+function frameOfDay() { const list=(CONTENT.frames&&CONTENT.frames.frames)||[]; if(!list.length)return null; const n=new Date().toISOString().slice(0,10).replace(/-/g,''); return list[Number(n)%list.length]; }
+function renderFrame() { const f=frameOfDay(); if(!f)return; $('#view').innerHTML=`<div class="card"><div class="meta"><span class="tag dom">每日第六题</span><span class="tag">${esc(f.dimension)}</span></div><h2>${esc(f.title)}</h2><p class="scene">${esc(f.case)}</p><p class="prompt">${esc(f.q)}</p><div class="opts">${f.options.map((x,i)=>`<button class="opt" onclick="answerFrame(${i})"><span class="k">${'ABCD'[i]}</span>${esc(x)}</button>`).join('')}</div></div>`; }
+function answerFrame(i) { const f=frameOfDay(); if(!f)return; const ok=i===f.answer; state.daily.frame=1; state.frameSession={id:f.id,choice:i}; state.answers.push({t:Date.now(),id:'frame-'+f.id,err:ok?'正解':'五维分析偏差',ok}); save(); renderToday(); toast(ok?'答对了：'+f.why:'先看解析：'+f.why); }
 
 /* ============================================================ 视图表 */
 
