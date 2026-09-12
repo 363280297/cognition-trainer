@@ -64,6 +64,7 @@ const DEFAULT_STATE = {
   // rootKnown / rootOk 是三态而不是布尔：null 表示「还没探测过」。
   // 压成 false 会把「未知」显示成「root 不可用」，那是误报。
   frameSession: { id: null, choice: null },
+  frameStats: {},             // 五维题按维度累计：{维度: {seen, correct}}，只用于评估和调整抽题
   gate: { armed: false, packages: [], enabled: false,
           deepBlock: false, rootKnown: false, rootOk: false,
           // 防掉线：want 是「用户想不想开着」，running 是「心跳文件真的在跳吗」。
@@ -4934,9 +4935,22 @@ function renderToday() {
     </div>`;
 }
 
-function frameOfDay() { const list=(CONTENT.frames&&CONTENT.frames.frames)||[]; if(!list.length)return null; const n=new Date().toISOString().slice(0,10).replace(/-/g,''); return list[Number(n)%list.length]; }
+function frameOfDay() {
+  const list=(CONTENT.frames&&CONTENT.frames.frames)||[]; if(!list.length)return null;
+  const dims=[...new Set(list.map(x=>x.dimension).filter(Boolean))];
+  const stats=state.frameStats||{};
+  /* 每天只抽一道；在保持日期稳定的前提下，优先补充近期正确率低的维度，
+     没有数据的维度先轮换，避免用户永远只被考同一类。 */
+  const scored=dims.map((dim,i)=>{const z=stats[dim]||{};const seen=Number(z.seen)||0;const acc=seen?Number(z.correct||0)/seen:0;return {dim,i,score:(seen?1-acc:1.2)+(i/dims.length)*0.001};}).sort((a,b)=>b.score-a.score);
+  const day=Number(new Date().toISOString().slice(0,10).replace(/-/g,''));
+  const dim=scored[day%Math.min(scored.length,3)].dim;
+  const pool=list.filter(x=>x.dimension===dim);
+  return pool[day%pool.length]||list[day%list.length];
+}
 function renderFrame() { const f=frameOfDay(); if(!f)return; $('#view').innerHTML=`<div class="card"><div class="meta"><span class="tag dom">每日第六题</span><span class="tag">${esc(f.dimension)}</span></div><h2>${esc(f.title)}</h2><p class="scene">${esc(f.case)}</p><p class="prompt">${esc(f.q)}</p><div class="opts">${f.options.map((x,i)=>`<button class="opt" onclick="answerFrame(${i})"><span class="k">${'ABCD'[i]}</span>${esc(x)}</button>`).join('')}</div></div>`; }
-function answerFrame(i) { const f=frameOfDay(); if(!f)return; const ok=i===f.answer; state.daily.frame=1; state.frameSession={id:f.id,choice:i}; state.answers.push({t:Date.now(),id:'frame-'+f.id,err:ok?'正解':'五维分析偏差',ok}); save(); renderToday(); toast(ok?'答对了：'+f.why:'先看解析：'+f.why); }
+function answerFrame(i) { const f=frameOfDay(); if(!f)return; const ok=i===f.answer; state.daily.frame=1; state.frameSession={id:f.id,choice:i};
+  state.frameStats=state.frameStats||{}; const z=state.frameStats[f.dimension]||{seen:0,correct:0}; z.seen=(z.seen||0)+1; if(ok)z.correct=(z.correct||0)+1; state.frameStats[f.dimension]=z;
+  state.answers.push({t:Date.now(),id:'frame-'+f.id,dimension:f.dimension,err:ok?'正解':'五维分析偏差',ok}); save(); renderToday(); toast(ok?'答对了：'+f.why:'先看解析：'+f.why); }
 
 /* ============================================================ 视图表 */
 
