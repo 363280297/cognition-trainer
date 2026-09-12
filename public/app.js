@@ -584,16 +584,51 @@ function rate(id, correct) {
   save();
 }
 
-/* 表面变体：同一张卡每次可能出现不一样的场景和措辞，但考点、选项、解释完全一样。
-   为什么值得这么做：变化的是检索线索，不变的是原理。每次看到略微不同的场景，
-   你要做的是同一类判断——这比反复看同一句话更难靠记忆过关，也更接近现实，
-   因为现实里没有两次一模一样的情景。
-   注意 id 不变，所以间隔重复的进度、偏差画像的统计都还是同一张卡。 */
+/* 同考点的一组完整题目。旧的仅换场景变体不能再混用原题答案。
+   家族 id 保留复习进度；formId 和 answerKey 留下实际作答的题目与选项。 */
+function cardForms(card) {
+  const textFields = ['id', 'skill', 'context', 'quote', 'question', 'explain', 'alt', 'action'];
+  const nonempty = (s) => typeof s === 'string' && !!s.trim();
+  const ids = new Set([card.id]);
+  return [card].concat((card.variants || []).filter((v) => {
+    if (!v || !textFields.every((k) => nonempty(v[k])) || v.skill !== card.skill || ids.has(v.id)) return false;
+    if (!Array.isArray(v.options) || v.options.length !== 4) return false;
+    const keys = v.options.map((o) => o.id);
+    if (new Set(keys).size !== 4 || !keys.every((id) => ['A', 'B', 'C', 'D'].includes(id))) return false;
+    if (!v.options.every((o) => ['text', 'why', 'err'].every((k) => nonempty(o[k])))) return false;
+    if (!keys.includes(v.best) || !Array.isArray(v.ok) || !v.ok.every((id) => keys.includes(id) && id !== v.best)) return false;
+    if (!v.plan || !nonempty(v.plan.if) || !nonempty(v.plan.then)) return false;
+    if (card.type === 'read' || card.genre) {
+      if (!['genre', 'state', 'genreWhy'].every((k) => nonempty(v[k])) || !Array.isArray(v.genreAlt)) return false;
+      if (!Array.isArray(v.clues) || !v.clues.length || !v.clues.some((c) => c.ok === true)
+          || !v.clues.every((c) => nonempty(c.text) && typeof c.ok === 'boolean')) return false;
+    }
+    ids.add(v.id);
+    return true;
+  }));
+}
+
 function applyVariant(card) {
-  const vs = card.variants;
-  if (!vs || !vs.length) return card;
-  const v = vs[Math.floor(Math.random() * vs.length)];
-  return Object.assign({}, card, { context: v.context || card.context, quote: v.quote || card.quote });
+  const forms = cardForms(card);
+  const storedSeen = Number((state.srs[card.id] || {}).seen);
+  const seen = Number.isSafeInteger(storedSeen) && storedSeen >= 0 ? storedSeen : 0;
+  const index = seen % forms.length;
+  const result = JSON.parse(JSON.stringify(Object.assign({}, card, forms[index])));
+  result.id = card.id;
+  result.formId = forms[index].id;
+  result.formIndex = index;
+  result.formCount = forms.length;
+  delete result.variants;
+  const remap = {};
+  shuffleInPlace(result.options).forEach((option, i) => {
+    const key = option.id;
+    option.answerKey = key;
+    option.id = ['A', 'B', 'C', 'D'][i];
+    remap[key] = option.id;
+  });
+  result.best = remap[result.best];
+  result.ok = (result.ok || []).map((id) => remap[id]);
+  return result;
 }
 
 /* ------------------------------------------------------ 偏重出题（自适应）
@@ -690,7 +725,10 @@ function domainBar() {
   CONTENT.cards.cards.forEach((c) => { counts[c.domain] = (counts[c.domain] || 0) + 1; });
   const avail = DOMAINS.filter((d) => d === '全部' || counts[d]);
   if (avail.length <= 2) return '';
-  return `<div class="chips">${avail.map((d) => `
+  const families = CONTENT.cards.cards.filter((c) => cardDomain === '全部' || c.domain === cardDomain);
+  const total = families.reduce((n, c) => n + cardForms(c).length, 0);
+  return `<div class="hint" style="margin-bottom:8px">${families.length} 组 · ${total} 道完整题目 · 同考点轮换练习</div>
+    <div class="chips">${avail.map((d) => `
     <button class="chip-btn ${d === cardDomain ? 'on' : ''}" onclick="setDomain('${d}')">
       ${d}${d === '全部' ? '' : ` <em>${counts[d]}</em>`}
     </button>`).join('')}</div>`;
@@ -779,7 +817,7 @@ function renderPlans() {
         </div>
         <div class="plan-line"><b>如果</b>${esc(p.if)}</div>
         <div class="plan-line"><b>我就</b>${esc(p.then)}</div>
-        ${card ? `<button class="plain tiny" onclick="showPlanSource('${p.cardId}')">看这道题</button>` : ''}
+        ${card ? `<button class="plain tiny" onclick="showPlanSource(${esc(JSON.stringify(p.cardId))}, ${esc(JSON.stringify(p.id))})">看这道题</button>` : ''}
         <button class="ghost tiny" onclick="rehearse('${p.id}')">看过了</button>
         <button class="plain tiny" onclick="dropPlan('${p.id}')">删掉</button>
       </div>`;
@@ -806,10 +844,14 @@ function dropPlan(id) {
   renderPlans();
 }
 
-function showPlanSource(cardId) {
+function showPlanSource(cardId, planId) {
   const i = CONTENT.cards.cards.findIndex((c) => c.id === cardId);
   if (i < 0) return;
-  session = { queue: [CONTENT.cards.cards[i]], i: 0, lowLoad: true, genrePick: null, cluePick: null };
+  const base = CONTENT.cards.cards[i];
+  const plan = state.plans.find((p) => p.id === planId && p.cardId === cardId);
+  const form = cardForms(base).find((f) => f.id === (plan && plan.formId)) || base;
+  const card = Object.assign({}, base, form, { id: cardId, formId: form.id });
+  session = { queue: [card], i: 0, lowLoad: true, genrePick: null, cluePick: null };
   cardsView = 'drill';
   renderCard();
 }
@@ -929,6 +971,7 @@ function renderCard() {
         <span class="tag dom">${esc(card.domain || '')}</span>
         <span class="tag">${esc(card.stage)}</span>
         ${meta ? `<span class="tag">第 ${meta.seen + 1} 次</span>` : '<span class="tag">新题</span>'}
+        ${card.formCount > 1 ? `<span class="tag">同考点第 ${card.formIndex + 1}/${card.formCount} 题</span>` : ''}
         <span class="tag" id="readTag" style="cursor:pointer" onclick="toReadOnly()">只读模式</span>
       </div>
       <p class="scene">${rich(card.context)}</p>
@@ -1122,7 +1165,7 @@ function answerCard(chosen) {
     genreOk = acceptable.includes(session.genrePick);
     if (!genreOk) recordBias('误判场合');
     state.answers.push({
-      t: Date.now(), id: card.id + '#genre',
+      t: Date.now(), id: card.id + '#genre', formId: card.formId || card.id,
       err: genreOk ? '正解' : '误判场合', ok: genreOk,
     });
     if (state.answers.length > 300) state.answers = state.answers.slice(-300);
@@ -1136,13 +1179,14 @@ function answerCard(chosen) {
     const idx = (typeof session.cluePick === 'number') ? session.cluePick : -1;
     clueOk = !!(card.clues[idx] && card.clues[idx].ok);
     state.answers.push({
-      t: Date.now(), id: card.id + '#clue',
+      t: Date.now(), id: card.id + '#clue', formId: card.formId || card.id,
       err: clueOk ? '正解' : '依据没找对', ok: clueOk,
     });
     if (state.answers.length > 300) state.answers = state.answers.slice(-300);
   }
   // 逐次留档，阶段评估的纵向比对要用。只留最近 300 次：要的是趋势，不是档案。
-  state.answers.push({ t: Date.now(), id: card.id, err: (ok || half) ? '正解' : (picked.err || '正解'), ok: !!ok });
+  state.answers.push({ t: Date.now(), id: card.id, formId: card.formId || card.id,
+    answerKey: picked.answerKey || chosen, err: (ok || half) ? '正解' : (picked.err || '正解'), ok: !!ok });
   if (state.answers.length > 300) state.answers = state.answers.slice(-300);
 
   const others = card.options.filter((o) => o.id !== chosen && o.id !== card.best);
@@ -1273,7 +1317,7 @@ function answerCard(chosen) {
    中间那道坎就是缺一个具体到能自动触发的「如果」。 */
 function planEditor(card) {
   const seed = card.plan;
-  const mine = state.plans.find((p) => p.cardId === card.id);
+  const mine = state.plans.find((p) => p.cardId === card.id && (p.formId || p.cardId) === (card.formId || card.id));
   const curIf = mine ? mine.if : '';
   const curThen = mine ? mine.then : '';
   return `
@@ -1336,13 +1380,16 @@ function savePlan(cardId) {
     return;
   }
 
-  const existing = state.plans.find((p) => p.cardId === cardId);
+  const card = session.queue[session.i];
+  if (!card || card.id !== cardId) return;
+  const formId = card.formId || cardId;
+  const existing = state.plans.find((p) => p.cardId === cardId && (p.formId || p.cardId) === formId);
   if (existing) {
     existing.if = pif;
     existing.then = pthen;
     existing.ts = Date.now();
   } else {
-    state.plans.push({ id: 'p' + Date.now(), cardId, if: pif, then: pthen, ts: Date.now(), rehearsed: 0 });
+    state.plans.push({ id: 'p' + Date.now(), cardId, formId, if: pif, then: pthen, ts: Date.now(), rehearsed: 0 });
   }
   save();
   msg.className = 'plan-msg ok';
@@ -2809,24 +2856,27 @@ function fogPassDaily() {
  * **单纯给提示语是无效的**——有效的是摩擦 + 那个放弃选项。
  * 所以这里的闸门必须是「要动手才能过」，不能只是一句劝说。 */
 
-/** 把「是否武装闸门」和「目标应用列表」推给原生。
- *  由 JS 算达标、原生只负责执行——这样判定逻辑只有一份，不会两边漂移。 */
+/** 达标状态连同日期送给原生；开关是独立的用户意图，原生跨天会重新拦截。 */
 function syncGate() {
   const g = state.gate || {};
-  const arm = !!g.enabled && !dailyProgress().met;
+  const dp = dailyProgress();
+  const arm = !!g.enabled && !dp.met;
   g.armed = arm;
   state.gate = g;
-  if (window.EQNative && EQNative.setGate) {
+  if (window.EQNative && (EQNative.setTrainingState || EQNative.setGate)) {
     try {
-      const dp = dailyProgress();
       // 进度文案和「还能不能跳」都推给原生：浮层是在目标应用露头那一帧弹出来的，
       // 那时来不及回调网页问一遍，所以必须提前落盘在原生那边。
       const summary = dp.met
         ? '今天已达标。'
         : `今天的量很小：还差 ${dp.need - dp.done} 步（卡片判对 ${dp.cards}/${dp.tg.cards} · 微课 ${dp.lessons}/${dp.tg.lessons}）。`
           + '卡片要判对才算——点过去不算。';
-      EQNative.setGate(arm ? 1 : 0, JSON.stringify(g.packages || []),
-        summary, dp.canSkip ? 1 : 0);
+      if (EQNative.setTrainingState) {
+        EQNative.setTrainingState(g.enabled ? 1 : 0, dp.met ? 1 : 0, todayStr(),
+          JSON.stringify(g.packages || []), summary, dp.canSkip ? 1 : 0);
+      } else {
+        EQNative.setGate(arm ? 1 : 0, JSON.stringify(g.packages || []), summary, dp.canSkip ? 1 : 0);
+      }
     } catch (e) { /* 非 Android 环境，忽略 */ }
   }
   if (window.EQNative && EQNative.scheduleReminder) {

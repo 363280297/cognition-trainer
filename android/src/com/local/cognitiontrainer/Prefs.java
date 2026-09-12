@@ -24,31 +24,61 @@ final class Prefs {
     }
 
     // ---------------------------------------------------------- 闸门
+    /** 旧网页只有 armed，无法区分「关闭」与「达标」，不能据此确认完成。 */
     static void setGate(Context c, boolean armed, String packagesJson,
                         String summary, boolean canSkip) {
         sp(c).edit()
-                .putBoolean("armed", armed)
+                .putBoolean("gateEnabled", armed)
+                .putBoolean("dailyMetVerified", false)
                 .putString("packages", packagesJson == null ? "[]" : packagesJson)
                 // 浮层上要显示进度文案，而浮层可能在主界面没起来时被唤起，
                 // 所以这句也得落盘，不能只留在内存里。
                 .putString("gateSummary", summary == null ? "" : summary)
                 .putBoolean("gateCanSkip", canSkip)
+                .putString("gateDate", today(c))
                 .apply();
+    }
+
+    /** 用户开关长期有效；当天事实只能由带当前本地日期的网页记录更新。 */
+    static void setTrainingState(Context c, boolean enabled, boolean met, String date,
+                                 String packagesJson, String summary, boolean canSkip) {
+        SharedPreferences.Editor edit = sp(c).edit()
+                .putBoolean("gateEnabled", enabled)
+                .putString("packages", packagesJson == null ? "[]" : packagesJson);
+        if (today(c).equals(date)) {
+            edit.putBoolean("dailyMet", met)
+                    .putBoolean("dailyMetVerified", true)
+                    .putString("dailyDate", date)
+                    .putString("gateDate", date)
+                    .putString("gateSummary", summary == null ? "" : summary)
+                    .putBoolean("gateCanSkip", canSkip);
+        }
+        // 旧页面跨天后可能仍发昨天的数据，也可能传来未来日期。
+        // 不存这些日期事实，防止未来自动生效；也不覆盖已经收到的今天事实。
+        edit.apply();
     }
 
     /** 浮层上显示的那行进度。网页算好推过来，原生不重复算。 */
     static String gateSummary(Context c) {
+        if (!today(c).equals(sp(c).getString("gateDate", ""))) {
+            return "今天的进度尚未同步，请打开训练页确认。";
+        }
         String s = sp(c).getString("gateSummary", "");
         return s.isEmpty() ? "今天的量很小，做完就达标。" : s;
     }
 
     /** 今天还能不能跳过。用过了浮层上就不给「跳过」按钮——Never Miss Twice。 */
     static boolean gateCanSkip(Context c) {
+        // 没有今天的证据时，不能用昨天的跳过限制锁住用户。
+        if (!today(c).equals(sp(c).getString("gateDate", ""))) return true;
         return sp(c).getBoolean("gateCanSkip", false);
     }
 
     static boolean isArmed(Context c) {
-        return sp(c).getBoolean("armed", false);
+        // 旧 armed=true 能证明用户启用了闸门；false 含义不明，保持关闭。
+        // 不把派生 armed 写回，避免当天达标丢掉下一天仍应有效的启用意图。
+        boolean enabled = sp(c).getBoolean("gateEnabled", sp(c).getBoolean("armed", false));
+        return enabled && !dailyMet(c);
     }
 
     static String packages(Context c) {
@@ -86,17 +116,12 @@ final class Prefs {
     }
 
     // ---------------------------------------------------------- 每日达标
-    static void setDailyMet(Context c, boolean met, String date) {
-        sp(c).edit()
-                .putBoolean("dailyMet", met)
-                .putString("dailyDate", date == null ? "" : date)
-                .apply();
-    }
-
     /** 只有「今天这一条记录」才算数——跨天之后旧记录不能拿来当达标证据 */
     static boolean dailyMet(Context c) {
         String d = sp(c).getString("dailyDate", "");
-        return sp(c).getBoolean("dailyMet", false) && d.equals(today(c));
+        // 旧版本从 !armed 推出来的 dailyMet 不是实际完成证据。
+        return sp(c).getBoolean("dailyMetVerified", false)
+                && sp(c).getBoolean("dailyMet", false) && d.equals(today(c));
     }
 
     static String today(Context c) {

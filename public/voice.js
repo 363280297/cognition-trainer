@@ -35,6 +35,12 @@ const V = {
   waiters: {},
   seq: 0,
   sess: null,       // 当前陪练会话
+  sessionEpoch: 0,  // 结束/切换都会失效；续聊同一个 sid 也算新的上下文
+  turnRequest: null,
+  debriefRequest: null,
+  sceneRequest: null,
+  speechRequest: null,
+  historyAnalysisRequests: new Map(),
   busy: false,
   /* 她正在出声。这时不该做别的（比如她说到一半你又发一句），
      而且界面上的提示文字靠它区分「她在说」和「等你打字」。 */
@@ -394,7 +400,7 @@ function llmSystem(sc) {
   ].join('\n');
 }
 
-async function llmCallOnce(messages, temperature, maxTokens, noFormat, textOk, modelOverride) {
+async function llmCallOnce(messages, temperature, maxTokens, noFormat, textOk, modelOverride, isCurrent) {
   const s = settings();
   if (!s.apiKey && V.native) throw new Error('还没填 API 密钥：点右上角 ⚙ 填一次就行');
   /* 这一次实际用的模型名。绝大多数调用就是设置里那个；只有「截图转文字」
@@ -431,6 +437,7 @@ async function llmCallOnce(messages, temperature, maxTokens, noFormat, textOk, m
   };
 
   res = await send(url);
+  if (isCurrent && !isCurrent()) throw new Error('请求已失效');
 
   /* 404 自动回退一次。
    *
@@ -448,6 +455,7 @@ async function llmCallOnce(messages, temperature, maxTokens, noFormat, textOk, m
   let fellBack = '';
   if (res.status === 404 && url !== CANONICAL_URL) {
     const retry = await send(CANONICAL_URL);
+    if (isCurrent && !isCurrent()) throw new Error('请求已失效');
     if (retry.status >= 200 && retry.status < 300) {
       fellBack = url;
       url = CANONICAL_URL;
@@ -574,8 +582,11 @@ async function llmCall(messages, opts) {
 
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      return await llmCallOnce(messages, temperature, budget, noFormat, textOk, o.model);
+      if (o.isCurrent && !o.isCurrent()) throw new Error('请求已失效');
+      return await llmCallOnce(messages, temperature, budget, noFormat, textOk, o.model, o.isCurrent);
     } catch (e) {
+      // 会话切换后的失败也要静默，不能提示重试或再发一次旧请求。
+      if (o.isCurrent && !o.isCurrent()) throw e;
       if (e.truncated) {
         if (!truncRetried && budget < 12000) {
           truncRetried = true;
@@ -663,6 +674,8 @@ function speak(text) {
   const style = TONE_STYLE[(V.sess && V.sess.lastTone) || '平淡'] || { rate: 1, pitch: 1 };
   const rate = style.rate * (st.rate || 1);
   const pitch = style.pitch * (st.pitch || 1);
+  const request = {};
+  V.speechRequest = request;
   V.speaking = true;
   if (V.native && V.caps.tts) {
     V.native.speak(text, rate, pitch);
@@ -672,8 +685,9 @@ function speak(text) {
       const u = new SpeechSynthesisUtterance(text);
       u.lang = 'zh-CN'; u.rate = rate; u.pitch = pitch;
       // 浏览器侧没有原生回调，得自己接上，否则「她正在说」永远不会结束
-      u.onend = () => onSpeakDone();
-      u.onerror = () => onSpeakDone();
+      const done = () => { if (V.speechRequest === request) onSpeakDone(); };
+      u.onend = done;
+      u.onerror = done;
       speechSynthesis.speak(u);
     } catch (e) { V.speaking = false; }
   } else {
@@ -695,14 +709,31 @@ function stopSpeak() {
   // 而「不回调」和「晚回调」在界面上是分不清的——状态由声音那边负责的话，
   // 一旦回调没来，界面就一直停在"她在说"，且不报错。
   V.speaking = false;
+  V.speechRequest = null;
   if (V.native && V.caps.tts) V.native.stopSpeak();
   else if (window.speechSynthesis) speechSynthesis.cancel();
 }
 
 /* ---------------------------------------------------------------- 会话 */
 
+function sessionIsCurrent(sess, epoch) {
+  return V.sess === sess && V.sessionEpoch === epoch;
+}
+
+/** 旧请求可以在后台结束，但从这里起不能再写会话、画界面或解锁新请求。 */
+function invalidateSessionWork() {
+  V.sessionEpoch++;
+  V.turnRequest = null;
+  V.debriefRequest = null;
+  V.sceneRequest = null;
+  V.busy = false;
+  V.lastTurnMs = 0;
+  V.latencyWarned = false;
+  closeTalkHint();
+  stopSpeak();
+}
+
 async function startSession(scOrId) {
-  closeTalkHint();          // 上一局留下的提示不该带到这一局
   /* 两条路都走：按 id 查，或者直接把对象传进来。
      id 要在**全部**场景里查（现成 + AI 造进库的）。只查现成那 14 个的话，
      从库里点一个 AI 造的场景会静静地什么都不发生——`if (!sc) return;`
@@ -711,11 +742,9 @@ async function startSession(scOrId) {
     ? allSceneList().find((x) => x.id === scOrId)
     : scOrId;
   if (!sc) return;
+  invalidateSessionWork();
   V.ended = false;
-  V.speaking = false;
   V.lastDebrief = null;
-  V.lastTurnMs = 0;
-  V.latencyWarned = false;
   V.sess = {
     sc, turn: 0,
     /* sid = 这一局在历史记录里的 id，开局就定下来。
@@ -738,20 +767,23 @@ async function startSession(scOrId) {
 
 /** 拿她的下一句。userText 为 null 时表示由你给出她的开场白 */
 async function nextTurn(userText, forcedReply) {
-  if (V.busy) return;
+  if (!V.sess || V.ended || V.busy) return;
+  const sess = V.sess, epoch = V.sessionEpoch;
+  const request = {};
+  V.turnRequest = request;
+  const current = () => sessionIsCurrent(sess, epoch) && !V.ended && V.turnRequest === request;
   V.busy = true;
   try {
     if (forcedReply) {
-      V.sess.lastTone = '平淡';
-      V.sess.turn++;
+      sess.lastTone = '平淡';
+      sess.turn++;
       /* 这里原来对 her_state 做了 slice(0, 40) —— 那是**用户看得见的正文**，
          砍在 40 字正好把 s1 最后那半句「…如果你一直找话题、表现自己，她会累」
          切成了「…如果你一直找话题、表」。六个现成场景全中，砍掉的恰好是最要紧那句。
          正文一个字都不该在渲染时截——要短就在数据里写短。 */
-      showHerTurn({ reply: forcedReply, tone: '平淡', inner: V.sess.sc.her_state || '', signal: '（开局）', rating: '平', rating_why: '先听她说，别急着回', temp: V.sess.temp, temp_delta: 0 });
-      V.sess.history.push({ role: 'assistant', content: forcedReply });
+      showHerTurn({ reply: forcedReply, tone: '平淡', inner: sess.sc.her_state || '', signal: '（开局）', rating: '平', rating_why: '先听她说，别急着回', temp: sess.temp, temp_delta: 0 });
+      sess.history.push({ role: 'assistant', content: forcedReply });
       if (settings().autoSpeak) speak(forcedReply);
-      V.busy = false;
       return;
     }
 
@@ -764,11 +796,12 @@ async function nextTurn(userText, forcedReply) {
        「返回的不是 JSON」的红框——用户的原话是「这个前缀删掉，直接输出对话就行」。
        缺的字段在下面补成"明说了没有"，而不是留空。 */
     const o = await llmCall(
-      [{ role: 'system', content: llmSystem(V.sess.sc) }, ...V.sess.history],
-      { temperature: 0.9, textOk: true });
+      [{ role: 'system', content: llmSystem(sess.sc) }, ...sess.history],
+      { temperature: 0.9, textOk: true, isCurrent: current });
+    if (!current()) return;
     V.lastTurnMs = Date.now() - t0;
 
-    V.sess.turn++;
+    sess.turn++;
     /* 白话回来的时候，把缺的字段补成"明说了没有"。
        留空会让下游（内心独白、打分、复盘引用、温度条）显示成空白或 undefined——
        那正是这个项目一再踩的「看着有、其实没有」。 */
@@ -779,33 +812,37 @@ async function nextTurn(userText, forcedReply) {
       o.rating = o.rating || '平';
       o.rating_why = o.rating_why || '这一轮模型没按格式回，所以没有打分——话本身是有效的';
     }
-    V.sess.lastTone = o.tone || '平淡';
+    sess.lastTone = o.tone || '平淡';
     const d = Number(o.temp_delta) || 0;
-    V.sess.temp = Math.max(0, Math.min(100, Number(o.temp) || (V.sess.temp + d)));
-    o.temp = V.sess.temp;
+    sess.temp = Math.max(0, Math.min(100, Number(o.temp) || (sess.temp + d)));
+    o.temp = sess.temp;
     // 把用户**自己的原话**记进这一轮的记录里。以前只存了模型给的 signal（「他这句
     // 发出了什么信号」），于是复盘时想引用他说过的词只能靠模型转述——
     // 引用原话和转述在教练这件事上差别很大，前者才是可执行的。
     o.userText = userText || '';
-    V.sess.history.push({ role: 'assistant', content: o.reply });
-    V.sess.log.push(o);
+    sess.history.push({ role: 'assistant', content: o.reply });
+    sess.log.push(o);
     /* 每聊完一轮就落一次盘。
        用户的原话：「历史记录并不是结束之后才保存，而是只要有过一轮对话，
        即便中途没结束，也可以继续续上。」所以这里不等「结束」——
        中途关掉 App、切走、甚至忘了点结束，这一局都在历史里躺着，能接着聊。 */
-    storeTalkRecord(V.sess, V.lastDebrief, V.ended);
+    storeTalkRecord(sess, V.lastDebrief, false);
     showHerTurn(o);
     if (settings().autoSpeak) speak(o.reply);
     else onSpeakDone();      // 静音模式下没有「说完」这个事件，得自己推进循环
   } catch (e) {
+    if (!current()) return;
     toast(e.message);
     const box = document.getElementById('herSlot');
     if (box) box.insertAdjacentHTML('beforeend',
       `<div class="v-err">${esc(e.message)}</div>`);
   } finally {
-    setHerThinking(false);
-    V.busy = false;
-    noteTurnLatency();
+    if (current()) {
+      setHerThinking(false);
+      V.busy = false;
+      V.turnRequest = null;
+      noteTurnLatency();
+    }
   }
 }
 
@@ -838,7 +875,9 @@ function noteTurnLatency() {
 
 /** 用户说了一句 */
 async function userSaid(text) {
-  if (!text || !text.trim() || V.busy) return;
+  if (!V.sess || V.ended || !text || !text.trim() || V.busy) return;
+  V.historyAnalysisRequests.delete(V.sess.sid);
+  closeTalkHint();          // 已经作答，旧示范作废；即便本轮失败也不能卡在「正在想」
   const t = text.trim();
   const herLast = [...V.sess.history].reverse().find((h) => h.role === 'assistant');
   noteQuestion(t, herLast ? herLast.content : '');
@@ -1010,7 +1049,7 @@ function normalizeScenario(out, i) {
   return sc;
 }
 
-async function buildScenario(prompt) {
+async function buildScenario(prompt, isCurrent) {
   const s = settings();
   if (!s.apiKey && V.native) throw new Error('还没填 API 密钥：点下面的「⚙ 设置」填一次就行');
   if (!String(prompt || '').trim()) throw new Error('先写一句你想练什么');
@@ -1018,7 +1057,7 @@ async function buildScenario(prompt) {
   let out = await llmCall([
     { role: 'system', content: SCENE_SYS },
     { role: 'user', content: '我想练：' + String(prompt).trim() },
-  ], 0.85);
+  ], { temperature: 0.85, isCurrent });
 
   // 模型偶尔会把整个场景塞进一个外层键里（{"scenario":{...}} 这种）。
   // 字段名是明确的，所以只要顶层缺 opening 就往里找一层，别白白让它报错。
@@ -1601,14 +1640,17 @@ function libraryScene(sc) {
 async function randomStart() {
   const btn = document.getElementById('randBtn');
   const msg = document.getElementById('sceneMsg');
+  const current = beginSceneRequest(msg);
   if (btn) { btn.disabled = true; btn.textContent = '正在造…'; }
   if (msg) msg.textContent = '正在按缺口造一个场景（补现在最少的那类关系）…';
   try {
-    const sc = await buildScenario(randomPrompt());
+    const sc = await buildScenario(randomPrompt(), current);
+    if (!current()) return;
     libraryScene(sc);
     if (btn) { btn.disabled = false; btn.textContent = '按缺口造一个'; }
     await startSession(sc);
   } catch (e) {
+    if (!current()) return;
     if (btn) { btn.disabled = false; btn.textContent = '按缺口造一个'; }
     if (msg) msg.innerHTML = '<b>没建成：</b>' + esc(e.message || String(e));
   }
@@ -1619,19 +1661,33 @@ function useSeed(i) {
   if (el) { el.value = SCENE_SEEDS[i] || ''; el.focus(); }
 }
 
+/** 造场景也会异步切换会话：只让最后一次、仍在原页面上的选择生效。 */
+function beginSceneRequest(msg) {
+  const sess = V.sess, epoch = V.sessionEpoch, request = {};
+  const view = document.getElementById('view');
+  const page = view && view.firstElementChild;
+  V.sceneRequest = request;
+  return () => sessionIsCurrent(sess, epoch) && V.sceneRequest === request
+    && (msg ? document.getElementById('sceneMsg') === msg
+      : view && page && document.getElementById('view') === view && view.firstElementChild === page);
+}
+
 async function buildAndStart() {
   const el = document.getElementById('scenePrompt');
   const btn = document.getElementById('buildBtn');
   const msg = document.getElementById('sceneMsg');
+  const current = beginSceneRequest(msg);
   const prompt = el ? el.value : '';
   if (btn) { btn.disabled = true; btn.textContent = '正在建造…'; }
   if (msg) msg.textContent = '正在把这个提示词变成场景…';
   try {
-    const sc = await buildScenario(prompt);
+    const sc = await buildScenario(prompt, current);
+    if (!current()) return;
     libraryScene(sc);       // 自己写提示词造的也进库，回头能在列表里再练一遍
     if (btn) { btn.disabled = false; btn.textContent = '建造这个场景'; }
     await startSession(sc);
   } catch (e) {
+    if (!current()) return;
     if (btn) { btn.disabled = false; btn.textContent = '建造这个场景'; }
     if (msg) msg.innerHTML = '<b>没建成：</b>' + esc(e.message || String(e));
   }
@@ -1764,7 +1820,7 @@ function pushBubble(who, text) {
  * 提示面板在她说下一句时自动收起（见 showHerTurn 里的 closeTalkHint）：
  * 过期的建议比没有建议更误导。
  */
-const HINT = { open: false, forLine: '', demo: '', demoLine: '' };
+const HINT = { open: false, forLine: '', demo: '', demoLine: '', request: null };
 
 function talkHintCfg() { return CONTENT.talkhints || {}; }
 function talkMoves() { return talkHintCfg().moves || []; }
@@ -1828,6 +1884,7 @@ function toggleTalkHint() {
 }
 
 function closeTalkHint() {
+  HINT.request = null;
   const p = document.getElementById('talkHint');
   if (p) p.innerHTML = '';
   HINT.open = false;
@@ -1837,6 +1894,7 @@ function closeTalkHint() {
 }
 
 function openTalkHint() {
+  HINT.request = null;
   const panel = document.getElementById('talkHint');
   if (!panel) return;
   const line = lastHerLine();
@@ -1877,20 +1935,27 @@ async function talkHintDemo() {
   const btn = document.getElementById('hintDemoBtn');
   const cfg = talkHintCfg();
   const dp = cfg.demo_prompt || {};
+  if (!V.sess || V.ended || !HINT.open || !panel) return;
   if (V.busy) { toast('她还在说，等她说完再要'); return; }
   const s = settings();
   if (V.native && !s.apiKey) {
     toast('没填 API 密钥，用不了示范——上面的句式骨架照着说就行');
     return;
   }
+  const sess = V.sess, epoch = V.sessionEpoch, historyLength = sess.history.length;
+  const request = {};
+  HINT.request = request;
+  const current = () => sessionIsCurrent(sess, epoch) && !V.ended
+    && HINT.open && HINT.request === request && sess.history.length === historyLength
+    && document.getElementById('talkHint') === panel;
   if (btn) { btn.disabled = true; btn.textContent = '正在想…'; }
   try {
     const line = lastHerLine();
-    const last = (V.sess && V.sess.log) ? V.sess.log[V.sess.log.length - 1] : null;
+    const last = sess.log[sess.log.length - 1];
     const user = [
       `对方刚说的是：「${line}」`,
       last && last.inner ? `她心里其实在想：${last.inner}` : '',
-      V.sess && V.sess.sc ? `场景：${V.sess.sc.title || ''}` : '',
+      sess.sc ? `场景：${sess.sc.title || ''}` : '',
       '给我一句我能直接说出口的回应。',
     ].filter(Boolean).join('\n');
     const o = await llmCall([
@@ -1904,7 +1969,9 @@ async function talkHintDemo() {
       maxTokens: 1600,
       textOk: true,
       noFormat: true,      // 这一步要的是**白话一句**，不能带 response_format
+      isCurrent: current,
     });
+    if (!current()) return;
     /* 万一它还是回了个 JSON（模型偶尔会），也尽量把里面那句人话捞出来，
        而不是显示成空白。实测见过 {"suggestion":"…"} 这种形状。 */
     const demo = String(o.reply || (o.__plain ? '' : firstStringValue(o)) || '').trim();
@@ -1920,9 +1987,9 @@ async function talkHintDemo() {
         </div>`;
     }
   } catch (e) {
-    toast(e.message || '要不到示范');
+    if (current()) toast(e.message || '要不到示范');
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '给我一句能照着说的'; }
+    if (current() && btn) { btn.disabled = false; btn.textContent = '给我一句能照着说的'; }
   }
 }
 
@@ -1982,7 +2049,7 @@ function sendTyped() {
 function endSession() {
   const s = V.sess;
   if (!s) return;
-  closeTalkHint();          // 一局结束了，提示面板也收掉
+  invalidateSessionWork();
   /* 练完一局给这个情景记一笔。用途只有「今天就练这个」的轮换——
      没有它，那个推荐会一直推同一个，用户点两次就再也不看推荐了。
      只记现成情景：现造的场景每次 id 都不同，记下来就是一堆只出现一次的垃圾数据。
@@ -1994,7 +2061,8 @@ function endSession() {
   }
   // 结束之后绝不能再自动开麦——V.ended 是这条规则的唯一开关
   V.ended = true;
-  stopSpeak();
+  // 先存结束状态，切到下一局时无需等复盘请求完成。
+  storeTalkRecord(s, V.lastDebrief, true);
   const log = s.log;
   const avg = log.length ? Math.round(log.reduce((a, b) => a + (RATING_STYLE[b.rating] ? 1 : 0), 0) / log.length * 100) : 0;
   const goods = log.filter((x) => x.rating === '妙' || x.rating === '好').length;
@@ -2056,7 +2124,7 @@ function replaySession() {
 
 /* ---------------------------------------------------------------- 复盘 */
 
-async function makeDebrief(sess) {
+async function makeDebrief(sess, isCurrent) {
   if (!sess.log.length) throw new Error('这一局没聊几句，没什么可复盘的');
   const sc0 = sess.sc || {};
   /* 开场白单独放在最前面。log 里没有它（forcedReply 那条路直接 return 了），
@@ -2122,22 +2190,32 @@ async function makeDebrief(sess) {
     `他这一局提了 ${sess.asked || 0} 个问题，其中 ${sess.followUps || 0} 个是追问。`,
   ].join('\n');
 
-  return await llmCall([{ role: 'system', content: sys }, { role: 'user', content: user }], 0.7);
+  return await llmCall([{ role: 'system', content: sys }, { role: 'user', content: user }],
+    { temperature: 0.7, isCurrent });
 }
 
 async function fillDebrief() {
   const box = document.getElementById('debriefBody');
-  if (!box || !V.sess) return;
+  if (!box || !V.sess || !V.ended) return;
+  const sess = V.sess, epoch = V.sessionEpoch;
+  const request = {};
+  V.debriefRequest = request;
+  const current = () => sessionIsCurrent(sess, epoch) && V.ended && V.debriefRequest === request;
   box.innerHTML = '正在按你说过的原话生成复盘…（会多花一次模型调用）';
   try {
-    const d = await makeDebrief(V.sess);
+    const d = await makeDebrief(sess, current);
+    if (!current()) return;
     V.lastDebrief = d;
-    box.innerHTML = renderDebrief(d) + talkSavedLine(V.sess);
-    storeTalkRecord(V.sess, d, true);
+    storeTalkRecord(sess, d, true);
+    if (document.getElementById('debriefBody') === box) {
+      box.innerHTML = renderDebrief(d) + talkSavedLine(sess);
+    }
   } catch (e) {
+    if (!current()) return;
     /* 分析没生成出来，但这一局是真实发生过的：先把它存进历史（不带分析），
        之后再从历史详情里点「现在生成分析」补上。丢掉整条才是真的可惜。 */
-    const rec = storeTalkRecord(V.sess, null, true);
+    const rec = storeTalkRecord(sess, null, true);
+    if (document.getElementById('debriefBody') !== box) return;
     box.innerHTML = `<b>复盘没生成出来：</b>${esc(e.message || String(e))}
       <div class="row" style="margin-top:8px">
         <button class="ghost" onclick="fillDebrief()">再试一次</button>
@@ -2299,8 +2377,10 @@ function storeTalkRecord(sess, debrief, done) {
     // 创建时间保留最早那一次，另外记一个"最后动过"的时间
     rec.at = list[i].at || rec.at;
     rec.updatedAt = Date.now();
-    // 中途存的时候不要把手上的分析抹掉（那是他刚结束那一局的分析）
-    if (!rec.debrief && list[i].debrief) rec.debrief = list[i].debrief;
+    // 只有逐轮内容没变时才能沿用分析；续聊后旧分析不再覆盖整局。
+    if (!rec.debrief && list[i].debrief && JSON.stringify(list[i].log) === JSON.stringify(rec.log)) {
+      rec.debrief = list[i].debrief;
+    }
     list[i] = rec;
   } else {
     rec.updatedAt = rec.at;
@@ -2349,6 +2429,8 @@ function resumeTalk(id) {
   if (!t) { renderTalkHistory(); return; }
   if (t.done) { toast('这一局已经结束了，用「再来一局」重开一局'); return; }
   if (!t.log || !t.log.length) { toast('这一局没聊过，重开一局吧'); return; }
+  V.historyAnalysisRequests.delete(id);
+  invalidateSessionWork();
   const sc = Object.assign({}, t.sc, {
     // 人称和难度这两个字段要带回会话里：界面文案靠 ta，随机/轮换靠 difficulty
     ta: (t.sc && t.sc.ta) || '她',
@@ -2367,7 +2449,6 @@ function resumeTalk(id) {
   };
   V.ended = false;
   V.lastDebrief = null;      // 接着聊，之前那份分析作废，结束时重新生成
-  closeTalkHint();
   renderPractice();
   toast('接着聊。前面聊过的在上边。');
 }
@@ -2548,15 +2629,24 @@ async function reanalyzeTalk(id) {
   const box = document.getElementById('debriefBody');
   if (!t || !box) return;
   if (!t.log || !t.log.length) { box.textContent = '这一局没有对话内容，生成不了。'; return; }
+  const request = {};
+  box.debriefRequest = request;
+  V.historyAnalysisRequests.set(id, request);
+  // 续聊保存会替换记录对象；旧分析不能覆盖新增轮次后的记录。
+  const current = () => talks().find((x) => x && x.id === id) === t
+    && box.debriefRequest === request && V.historyAnalysisRequests.get(id) === request;
   box.innerHTML = '正在按当时说过的话生成分析…（一次模型调用）';
   try {
-    const d = await makeDebrief(t);
+    const d = await makeDebrief(t, current);
+    if (!current()) return;
     const i = talks().findIndex((x) => x && x.id === id);
     if (i >= 0) talks()[i].debrief = d;
     save();
+    if (document.getElementById('debriefBody') !== box) return;
     box.innerHTML = renderDebrief(d);
     toast('分析存进这一条记录了');
   } catch (e) {
+    if (!current() || document.getElementById('debriefBody') !== box) return;
     box.innerHTML = `<b>还是没生成出来：</b>${esc(e.message || String(e))}
       <div class="row" style="margin-top:8px">
         <button class="ghost" onclick="reanalyzeTalk('${esc(id)}')">再试一次</button>
@@ -2670,7 +2760,7 @@ function setSectionHtml() {
     <p class="set-note" style="margin-top:12px">${backupStatusText()}</p>`;
   if (setSection === 'about') return `
     <div class="set-h">关于</div>
-    <p class="set-note">版本 2.45（versionCode 47）· 离线可用 · 权限 6 个
+    <p class="set-note">版本 2.46（versionCode 48）· 离线可用 · 权限 6 个
     （网络、通知、开机自启、悬浮窗，加两个只对 Android 8 及以下生效的存储权限）。
     <b>没有录音权限</b>：这一版起 App 不录音了，你打字，她出声。安装包约 0.5 MB。</p>
     <p class="set-note">密钥只存在这台手机的本地存储里，不会上传到任何地方，

@@ -558,9 +558,14 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void setGate(int armed, String packagesJson, String summary, int canSkip) {
             Prefs.setGate(MainActivity.this, armed == 1, packagesJson, summary, canSkip == 1);
-            // 今天是否达标要落盘：提醒接收器可能在主界面没起来时被唤醒，
-            // 那时内存里什么都没有，只能读磁盘。
-            Prefs.setDailyMet(MainActivity.this, armed != 1, Prefs.today(MainActivity.this));
+        }
+
+        /** 新网页分别传用户开关和当天真实达标状态，关闭闸门不等于达标。 */
+        @JavascriptInterface
+        public void setTrainingState(int enabled, int met, String date,
+                                     String packagesJson, String summary, int canSkip) {
+            Prefs.setTrainingState(MainActivity.this, enabled == 1, met == 1, date,
+                    packagesJson, summary, canSkip == 1);
         }
 
         /**

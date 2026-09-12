@@ -35,9 +35,9 @@ const chk = (l, c, e) => { console.log(`  ${c ? 'PASS' : 'FAIL'}  ${l}${e ? '  �
       ids: talk.map((c) => c.id),
       types: [...new Set(all.map((c) => c.type))],
       typeLabel: TYPE_NAME.talk,
-      // 每张 t 卡都要有 plan / variants / 4 选项 / 正解
+      // 每张 t 卡都要有 plan / 4 选项 / 正解；旧的仅换场景变体已移除，完整变式另有专项门禁
       bad: talk.filter((c) => !c.plan || !c.plan.if || !c.plan.then
-        || (c.variants || []).length < 2 || c.options.length !== 4
+        || c.options.length !== 4
         || !c.options.some((o) => o.id === c.best && o.err === '正解')).map((c) => c.id),
       quoteLines: talk.map((c) => c.quote.split('\n').length),
     };

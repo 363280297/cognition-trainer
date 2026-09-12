@@ -42,8 +42,8 @@ import java.util.Set;
  *      而这里 canRetrieveWindowContent=false，读不到任何界面内容，只拿到包名；
  *   3. 换台手机功能还在。
  *
- * 判定「该不该拦」不在原生做，由网页那边算（是否达标）后推过来，
- * 这样达标逻辑只有一份，不会两边漂移。
+ * 网页计算实际达标状态，原生按本地日期检查它是否仍然有效。
+ * 每次窗口事件重新判断，跨天恢复闸门不依赖午夜闹钟或打开网页。
  */
 public class GateService extends AccessibilityService {
 
@@ -51,11 +51,15 @@ public class GateService extends AccessibilityService {
 
     private long lastFire = 0;
     private View overlay;
+    private String overlayDate;
     private WindowManager wm;
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
         if (event == null || event.getEventType() != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return;
+        if (overlay != null && (!Prefs.isArmed(this) || !Prefs.today(this).equals(overlayDate))) {
+            hideOverlay();
+        }
         CharSequence pkgCs = event.getPackageName();
         if (pkgCs == null) return;
         String pkg = pkgCs.toString();
@@ -177,19 +181,11 @@ public class GateService extends AccessibilityService {
                 box.addView(skip);
             }
 
-            // 退路：只剩「卸载」这一条，写在脸上而不是藏在代码里。
-            //
-            // 这里要说清一件容易被误解的事，因为浮层上写着「只能卸载」，
-            // 很容易读成「前两条路已经被堵死了」——并不是。
-            // 「强行停止本应用」和「关掉无障碍服务」是系统给用户的权力，
-            // 不是这个 App 提供的选项，任何应用都关不掉它们
-            // （能关掉就是在利用系统漏洞，而且安全模式和 ADB 照样绕得过去）。
-            // 所以这里删掉的是**提示**，不是**路径**：不告诉你、不等于不存在。
-            // 真要硬堵，只能靠 root 那条深度拦截，而它依赖的 root 也可能不可用。
+            // 保留卸载出口提示，并区分应用内数据与已保存的外部备份。
             TextView route = new TextView(this);
-            route.setText("要退出这一层，只有一条路：在系统设置里卸载本应用。\n"
-                    + "进度、预案、身份陈述都在应用内部，卸载会一并清掉——"
-                    + "这是唯一的出口，代价是全部归零。");
+            route.setText("如果决定完全放弃训练，可以在系统设置里卸载本应用。\n"
+                    + "卸载会清除应用内部的进度、预案和身份陈述，"
+                    + "但不会删除已导出或保存在应用外的备份。");
             route.setTextColor(Color.parseColor("#8A82A0"));
             route.setTextSize(11);
             LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(
@@ -213,6 +209,7 @@ public class GateService extends AccessibilityService {
 
             wm.addView(box, lp);
             overlay = box;
+            overlayDate = Prefs.today(this);
         } catch (Exception e) {
             // 没有悬浮窗权限之类，静默放弃——不能因为拦不住就崩掉
             overlay = null;
@@ -223,6 +220,7 @@ public class GateService extends AccessibilityService {
         if (overlay == null || wm == null) return;
         try { wm.removeView(overlay); } catch (Exception ignored) { }
         overlay = null;
+        overlayDate = null;
     }
 
     private int dp(int v) {

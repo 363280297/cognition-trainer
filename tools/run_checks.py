@@ -11,8 +11,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 TOOLS = ROOT / "tools"
 
-# (脚本, 需要 server.py 吗, 一句话说明)
+# 完整变式题库的两项门禁只在正式题库已合并 120 组 / 360 道时加入；
+# 当前仓库仍是 84 张原题，运行逻辑由 check_card_variants.js 守着，
+# 不让「内容尚未合并」被误报成回归失败。
 CHECKS = [
+    ("tools/check_card_variants.js", False, "完整变式轮换/重排判分/预案来源"),
+    # 内容合并完成后，把 check_variant_library.js 和 check_variant_ui.js 加回这里。
+    ("tools/check_gate_sync.js", False, "闸门开关和实际达标状态分离"),
+    ("tools/check_session_isolation.js", False, "AI 会话异步响应隔离"),
+    ("tools/check_native_gate.py", False, "原生跨日闸门与提醒"),
+    ("tools/check_backup_atomic.py", False, "备份写入/校验失败时保护旧副本"),
     ("verify_offline.js", False, "离线版 HTML 与源码/数据同步（含输入指纹）"),
     ("tools/test_content.js", False, "题库内容：出处、边界、精品度"),
     ("tools/test_bridge.js", False, "原生桥：暴露/调用/回调/不可残留"),
@@ -70,8 +78,12 @@ def main():
             cmd = ["py", "-3", str(p)]
         else:
             cmd = ["node", str(p)]
-        r = subprocess.run(cmd, cwd=str(ROOT),
-                           capture_output=True, text=True, errors="replace")
+        try:
+            r = subprocess.run(cmd, cwd=str(ROOT), timeout=180,
+                               capture_output=True, text=True, encoding="utf-8", errors="replace")
+        except subprocess.TimeoutExpired:
+            results.append((rel, desc, 1, "180 秒超时，未验证；应单独检查卡住的脚本"))
+            break
         out = (r.stdout or "") + (r.stderr or "")
         tail = ""
         for line in reversed(out.strip().split("\n")):

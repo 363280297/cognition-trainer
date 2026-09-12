@@ -212,9 +212,9 @@ console.log('卡片：');
     c.variants.every((v) => v.context && v.context.trim() && v.quote && v.quote.trim())),
     `${withVar.length} / ${cards.length} 张带变体，共 ${withVar.reduce((a, c) => a + c.variants.length, 0)} 条`);
 
-  // 变体只换表面，不能改考点——所以变体卡片绝不能带自己的 options
-  t('变体不带自己的选项（改了选项就等于换了考点）',
-    withVar.every((c) => c.variants.every((v) => v.options === undefined)));
+  t('变式拥有独立问题、选项、答案和解析，并明确沿用同一考点',
+    withVar.every((c) => c.skill && c.variants.every((v) => v.skill === c.skill &&
+      v.question && v.options && v.options.length === 4 && v.best && v.explain && v.plan)));
 }
 
 console.log('\n微课：');

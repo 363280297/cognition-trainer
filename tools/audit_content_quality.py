@@ -66,7 +66,8 @@ def check_ids(files):
 
 
 def check_cards():
-    cards = load('cards.json')['cards']
+    families = load('cards.json')['cards']
+    cards = [form for c in families for form in [c] + [dict(c, **v) for v in c.get('variants', [])]]
     genres = genres_from_ui()
     stages = {s['id'] for s in load('stages.json')['stages']}
     stages |= {s.get('key') for s in load('stages.json')['stages']}
@@ -265,7 +266,8 @@ def check_gender():
     # 那张卡的对方是女性（「认识三年的女性朋友」），「男朋友」只是她吵架的对象，
     # 是第三方角色。松判据会产生大量误报，而误报会让这份审计失去可信度——
     # 真出问题的时候就没人看了。所以宁可只抓最确定的。
-    cards = load('cards.json')['cards']
+    families = load('cards.json')['cards']
+    cards = [form for c in families for form in [c] + [dict(c, **v) for v in c.get('variants', [])]]
     for c in cards:
         blob = ' '.join(str(c.get(k) or '') for k in
                         ['context', 'quote', 'question', 'state', 'principle', 'action', 'explain'])

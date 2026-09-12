@@ -63,7 +63,8 @@ for (const [input, wantOk, label] of cases) {
 // 种子预案必须全部通过，否则用户点「照着改」再保存会被自己拦住
 const data = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'cards.json'), 'utf8'));
 let seedFail = 0;
-for (const c of data.cards) {
+const forms = data.cards.flatMap((c) => [c, ...(c.variants || [])]);
+for (const c of forms) {
   const p = planProblem(c.plan.then);
   if (p) {
     console.log(`  FAIL  种子 ${c.id} 通不过自己的校验：${p.slice(0, 30)}`);
@@ -71,6 +72,6 @@ for (const c of data.cards) {
     seedFail++;
   }
 }
-console.log(`\n  种子预案 ${data.cards.length} 条，通不过的：${seedFail}`);
+console.log(`\n  种子预案 ${forms.length} 条，通不过的：${seedFail}`);
 console.log(`\n结果：${pass} 通过，${fail} 失败`);
 process.exit(fail + seedFail ? 1 : 0);
