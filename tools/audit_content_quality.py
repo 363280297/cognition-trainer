@@ -369,8 +369,8 @@ def check_readme_stats(cards):
     okl = Counter(len(c.get('ok') or []) for c in cards)
     claims = [
         (f'ok 为空的卡（3 个干扰项、区分度最好）是 {okl.get(0, 0)} 张', 'ok 为空的卡'),
-        (f'{okl.get(2, 0)} 张卡只剩 1 个干扰项', 'ok=2'),
-        (f'{okl.get(3, 0)} 张剩 0 个', 'ok=3'),
+        (f'{okl.get(2, 0)} 组只剩 1 个干扰项', 'ok=2'),
+        (f'{okl.get(3, 0)} 组剩 0 个', 'ok=3'),
     ]
     for want, label in claims:
         if want not in plain:

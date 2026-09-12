@@ -16,7 +16,8 @@ TOOLS = ROOT / "tools"
 # 不让「内容尚未合并」被误报成回归失败。
 CHECKS = [
     ("tools/check_card_variants.js", False, "完整变式轮换/重排判分/预案来源"),
-    # 内容合并完成后，把 check_variant_library.js 和 check_variant_ui.js 加回这里。
+    ("tools/check_variant_library.js", False, "完整变式题库结构/去重/答案位置"),
+    ("tools/check_variant_ui.js", False, "完整变式离线 UI 判分/预案来源"),
     ("tools/check_gate_sync.js", False, "闸门开关和实际达标状态分离"),
     ("tools/check_session_isolation.js", False, "AI 会话异步响应隔离"),
     ("tools/check_native_gate.py", False, "原生跨日闸门与提醒"),

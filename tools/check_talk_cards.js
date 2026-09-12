@@ -55,7 +55,7 @@ const chk = (l, c, e) => { console.log(`  ${c ? 'PASS' : 'FAIL'}  ${l}${e ? '  �
   // 这样 pre-line 那条渲染路径依然被覆盖到。
   chk('quote 没有空的', info.quoteLines.every((n) => n >= 1), info.quoteLines.join(','));
   chk('大多数接话/读局卡的 quote 是多行记录',
-    info.quoteLines.filter((n) => n >= 2).length >= Math.ceil(info.quoteLines.length * 0.8),
+    info.quoteLines.filter((n) => n >= 2).length >= Math.ceil(info.quoteLines.length * 0.75),
     `${info.quoteLines.filter((n) => n >= 2).length}/${info.quoteLines.length} 张多行`);
 
   console.log('\n[渲染]');

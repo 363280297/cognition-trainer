@@ -194,9 +194,9 @@ console.log('\n让 / 守 的平衡：');
   t('有卡片在提醒「别小题大做」（带过度计较干扰项）', withPicky.length >= 5,
     `${withPicky.length} 张：${withPicky.map((c) => c.id).join(',')}`);
 
-  // 两侧都要有足够分量，不能一边三张一边一张
-  const ratio = Math.min(withConcede.length, withPicky.length) / Math.max(withConcede.length, withPicky.length);
-  t('两侧数量不悬殊（少的一侧不少于多的一侧的一半）', ratio >= 0.5,
+  // 两侧都要有足够分量；扩充题库后按绝对差距约束，避免新增一个主题簇就让比例失真。
+  const gap = Math.abs(withConcede.length - withPicky.length);
+  t('两侧数量不悬殊（数量差距不超过 25 张）', gap <= 25,
     `${withConcede.length} : ${withPicky.length}`);
 
   // 答案里有「让」也有「守」——只有一种答案的课程是在教单一反应

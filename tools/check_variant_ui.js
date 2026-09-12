@@ -50,8 +50,13 @@ const started = Date.now();
           const fb = document.querySelector('#fb').textContent;
           expect(fb.includes('判断正确'), 'correct answer marked wrong');
           expect(fb.includes(plain(selected.why)), 'own answer rationale missing');
-          expect(fb.includes(plain(authored.explain)), 'own explanation missing');
-          expect(fb.includes(authored.plan.if) && fb.includes(authored.plan.then), 'own plan missing');
+          // explain is intentionally behind the accessible “为什么” disclosure button;
+          // assert the control and its payload rather than requiring hidden text in #fb.
+          const whyButton = [...document.querySelectorAll('#fb button')].find((b) => b.textContent.includes('为什么'));
+          expect(whyButton, 'explanation disclosure missing');
+          const popId = whyButton.getAttribute('onclick')?.match(/openPop\('([^']+)'\)/)?.[1];
+          expect(popId && POP_STORE[popId]?.body === authored.explain, 'explanation payload missing');
+          expect(fb.includes(plain(authored.plan.if)) && fb.includes(plain(authored.plan.then)), 'own plan missing');
           const record = state.answers[state.answers.length - 1];
           expect(record.id === base.id && record.formId === authored.id && record.answerKey === authored.best && record.ok, 'wrong persisted source or score');
           expect(state.srs[base.id].seen === index + 1, 'family progress not incremented');

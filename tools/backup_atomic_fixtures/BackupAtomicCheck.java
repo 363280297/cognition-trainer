@@ -270,7 +270,7 @@ public final class BackupAtomicCheck {
             require(NEW.equals(BackupStore.read(context(r))), "first read differs");
         });
         for (int api : new int[]{26, 28, 29}) {
-            for (String invalid : new String[]{null, "", "not json", "{\"a\":", "null", "[]", "{} trailing", "{\"a\":\"\ud800\"}"}) {
+            for (String invalid : new String[]{null, "", "not json", "{\"a\":", "null", "[]", "{} trailing", "{\"a\":\"\ud800\"}", "{\"answers\":[]} // comment", "{'answers':[]}", "{answers:[]}", "{\"answers\":[],}", "{\"n\":01}", "{\"n\":0x10}"}) {
                 test("API" + api + " rejects malformed input: " + invalid, () -> {
                     Build.VERSION.SDK_INT = api;
                     Resolver r = seeded();

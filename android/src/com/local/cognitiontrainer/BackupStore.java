@@ -10,7 +10,6 @@ import android.os.Environment;
 import android.provider.MediaStore;
 
 import org.json.JSONObject;
-import org.json.JSONTokener;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -289,13 +288,62 @@ final class BackupStore {
         if (text == null || text.isEmpty()) return false;
         try {
             if (!text.equals(new String(text.getBytes("UTF-8"), "UTF-8"))) return false;
-            JSONTokener tokens = new JSONTokener(text);
-            return tokens.nextValue() instanceof JSONObject && tokens.nextClean() == 0;
+            return new StrictJson(text).objectDocument();
         } catch (Exception e) {
             return false;
         }
     }
 
+    /** Android JSONTokener accepts comments and other extensions that JSON.parse rejects. */
+    private static final class StrictJson {
+        private final String text;
+        private int at;
+        StrictJson(String text) { this.text = text; }
+        boolean objectDocument() { ws(); boolean ok = object(); ws(); return ok && at == text.length(); }
+        private boolean value() {
+            ws(); if (at >= text.length()) return false;
+            char c = text.charAt(at);
+            if (c == '{') return object(); if (c == '[') return array(); if (c == '"') return string();
+            if (c == 't') return literal("true"); if (c == 'f') return literal("false");
+            if (c == 'n') return literal("null"); return number();
+        }
+        private boolean object() {
+            if (!take('{')) return false; ws(); if (take('}')) return true;
+            while (true) { if (!string()) return false; ws(); if (!take(':') || !value()) return false;
+                ws(); if (take('}')) return true; if (!take(',')) return false; ws(); }
+        }
+        private boolean array() {
+            if (!take('[')) return false; ws(); if (take(']')) return true;
+            while (true) { if (!value()) return false; ws(); if (take(']')) return true;
+                if (!take(',')) return false; ws(); }
+        }
+        private boolean string() {
+            if (!take('"')) return false;
+            while (at < text.length()) {
+                char c = text.charAt(at++); if (c == '"') return true; if (c < 0x20) return false;
+                if (c != '\\') continue; if (at >= text.length()) return false;
+                char escaped = text.charAt(at++); if ("\"\\/bfnrt".indexOf(escaped) >= 0) continue;
+                if (escaped != 'u' || at + 4 > text.length()) return false;
+                for (int i = 0; i < 4; i++) { char hex = text.charAt(at++);
+                    if (!((hex >= '0' && hex <= '9') || (hex >= 'a' && hex <= 'f') || (hex >= 'A' && hex <= 'F'))) return false; }
+            }
+            return false;
+        }
+        private boolean number() {
+            int start = at; take('-');
+            if (take('0')) { if (at < text.length() && Character.isDigit(text.charAt(at))) return false; }
+            else { if (at >= text.length() || text.charAt(at) < '1' || text.charAt(at) > '9') return false;
+                while (at < text.length() && Character.isDigit(text.charAt(at))) at++; }
+            if (take('.')) { int digits = at; while (at < text.length() && Character.isDigit(text.charAt(at))) at++; if (digits == at) return false; }
+            if (at < text.length() && (text.charAt(at) == 'e' || text.charAt(at) == 'E')) {
+                at++; if (at < text.length() && (text.charAt(at) == '+' || text.charAt(at) == '-')) at++;
+                int digits = at; while (at < text.length() && Character.isDigit(text.charAt(at))) at++; if (digits == at) return false; }
+            return at > start;
+        }
+        private boolean literal(String want) { if (!text.regionMatches(at, want, 0, want.length())) return false; at += want.length(); return true; }
+        private boolean take(char want) { if (at >= text.length() || text.charAt(at) != want) return false; at++; return true; }
+        private void ws() { while (at < text.length()) { char c = text.charAt(at); if (c != ' ' && c != '\t' && c != '\r' && c != '\n') return; at++; } }
+    }
     private static String validBody(byte[] bytes) throws Exception {
         String text = new String(bytes, "UTF-8");
         return Arrays.equals(bytes, text.getBytes("UTF-8")) && validText(text) ? text : null;
