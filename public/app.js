@@ -26,6 +26,7 @@ const DEFAULT_STATE = {
   streak: { count: 0, last: null },
   today: { date: null, count: 0 },
   stats: { answered: 0, correct: 0, wrongIds: [] },
+  dailyMix: { lastFamilies: [], lastSkills: [] },
   // 每个现成情景练过几次。只用来做「今天就练这个」的轮换——
   // 少了它，那个推荐会一直推同一个，用户点两次就再也不想看推荐了。
   scenes: {},
@@ -699,9 +700,17 @@ function buildQueue(mode) {
   const focus = biasFocus();
   // 变体在这里落地：整个一组刷完之前不会中途换场景，
   // 否则答完题看解释时场景变了，会很混乱。
-  return [...weightedPick(due, 6, focus),
-    ...weightedPick(fresh, Math.max(0, 6 - due.length), focus),
-    ...due.slice(6)]
+  const recent = new Set((state.dailyMix && state.dailyMix.lastFamilies) || []);
+  const freshPool = fresh.filter(c => !recent.has(c.id));
+  const duePool = due.filter(c => !recent.has(c.id));
+  const review = weightedPick(duePool.length ? duePool : due, Math.min(1, due.length), focus);
+  const weakPool = duePool.concat(freshPool).filter(c => focus.some(f => c.options.map(o => o.err).includes(f)));
+  const weak = weightedPick(weakPool, Math.min(2, weakPool.length), focus);
+  const used = new Set(review.concat(weak).map(c => c.id));
+  const novel = weightedPick(freshPool.filter(c => !used.has(c.id)), 1, []);
+  const transfer = weightedPick(all.filter(c => !used.has(c.id) && !recent.has(c.id)), 1, []);
+  return review.concat(weak, novel, transfer)
+    .filter((c, i, a) => a.findIndex(x => x.id === c.id) === i)
     .map(applyVariant);
 }
 
@@ -1185,6 +1194,9 @@ function answerCard(chosen) {
     if (state.answers.length > 300) state.answers = state.answers.slice(-300);
   }
   // 逐次留档，阶段评估的纵向比对要用。只留最近 300 次：要的是趋势，不是档案。
+  state.dailyMix = state.dailyMix || { lastFamilies: [], lastSkills: [] };
+  state.dailyMix.lastFamilies = [card.id].concat(state.dailyMix.lastFamilies || []).slice(0, 6);
+  state.dailyMix.lastSkills = [card.skill || card.stage || ''].concat(state.dailyMix.lastSkills || []).slice(0, 6);
   state.answers.push({ t: Date.now(), id: card.id, formId: card.formId || card.id,
     answerKey: picked.answerKey || chosen, err: (ok || half) ? '正解' : (picked.err || '正解'), ok: !!ok });
   if (state.answers.length > 300) state.answers = state.answers.slice(-300);
