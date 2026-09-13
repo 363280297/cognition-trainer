@@ -395,7 +395,7 @@ Sachdeva、Iliev & Medin（2009）让被试写自己身上的正面道德特质�
 
 这两个原来在卡片页顶部当子视图，现在挪进「成长」。它们不是装饰，各自对应一个研究结论。
 
-**完整变式（2.47，已正式交付）。** 正式 `data/cards.json` 现有 132 组判断卡、396 道完整题目：每组含原题、v1、v2 两道独立同考点变式。运行时按 family 复习次数轮换，随机重排选项并同步答案映射，`formId` 记录实际题目，预案按具体题目保存。规范见 [完整题目与同考点变式](docs/question-authoring.md)，检查入口为 `tools/check_variant_library.js`、`tools/check_card_variants.js`、`tools/check_variant_ui.js`。
+**完整变式（2.48，已正式交付）。** 正式 `data/cards.json` 现有 132 组判断卡、396 道完整题目：每组含原题、v1、v2 两道独立同考点变式。运行时按 family 复习次数轮换，随机重排选项并同步答案映射，`formId` 记录实际题目，预案按具体题目保存。规范见 [完整题目与同考点变式](docs/question-authoring.md)，检查入口为 `tools/check_variant_library.js`、`tools/check_card_variants.js`、`tools/check_variant_ui.js`。
 
 **逐选项诊断（frame-of-reference 训练的机制）。** 答完之后不只告诉你答案，还告诉你**你选的那条为什么当时显得合理、在哪一步断了、缺哪条线索**。这不是多余的啰嗦——它是这类训练唯一被证明有效的机制。Sulsky & Day（1992）和后续一系列研究（Lundstrom 2007；Loignon 等 2017）发现，让受训者把自己的判断和专家判断对齐、并解释差异来源，才能提高判断准确性；机制研究指向"关于他人行为的推理能力"本身变强（Baret & de Kock 2018），而不是记住了题目。只公布答案，学到的是这一题；解释误读路径，学到的是**识别这一类线索**。
 
@@ -1077,7 +1077,7 @@ cd android
 |---|---|
 | 包名 | `com.local.cognitiontrainer` |
 | 应用名 | 认知训练 |
-| versionCode / versionName | 49 / 2.47 |
+| versionCode / versionName | 50 / 2.48 |
 | minSdk / targetSdk | 26（Android 8.0+） / 34 |
 | 权限 | `INTERNET`、`POST_NOTIFICATIONS`、`RECEIVE_BOOT_COMPLETED`、`SYSTEM_ALERT_WINDOW`；另有 `WRITE/READ_EXTERNAL_STORAGE`，带 `maxSdkVersion=28`（新系统上不会被请求）。**没有 `RECORD_AUDIO`** |
 | 体积 | 约 0.5 MB（不需要任何 native 库） |
@@ -1098,7 +1098,7 @@ cd android
 
 **安装**：手机上打开 APK，系统会提示「允许安装未知来源应用」，同意即可。
 因为用的是调试签名，部分手机管家可能提示"未经验证的应用"，选继续安装。
-versionCode 是 49，**可以直接覆盖安装旧版，数据不丢**。
+versionCode 是 50，**可以直接覆盖安装旧版，数据不丢**。
 （这一次改的是原生拦截和设置页，网页侧的进度存在应用内部存储里，覆盖安装不动它。）
 
 **重新构建**（改了内容之后）：
@@ -1588,3 +1588,4 @@ py -3 -c "import json;json.load(open('data/cards.json',encoding='utf-8'));print(
 造了一个「只改 version 不改内容」的坏脚本去试它——守卫抓住了（退出码 1，报「j04 还在文件里」）。
 
 微课 37 → 39，六个系列。
+
