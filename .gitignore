@@ -33,3 +33,10 @@ android/build/
 # 跟踪它们的话，每跑一次回归仓库就变"脏"，diff 里全是二进制噪声，
 # 于是真正的改动被淹掉。文件本身留在磁盘上，只是不入库。
 tools/_*.png
+# Gradle 本机缓存与环境路径
+android/.gradle/
+android/app/build/
+android/local.properties
+android/gradle-*-bin.zip
+android/gradle-[0-9]*/
+\n

@@ -1054,7 +1054,19 @@ JS 那一半（真图真接口，100% 命中）、以及两边规则一致（有
 
 ---
 
-## Android App（真正的手机客户端）
+## Android App（Gradle + Kotlin + AndroidX）
+
+Android 客户端现在默认使用 Gradle 构建：
+
+```powershell
+cd android
+.\gradlew.bat assembleDebug
+```
+
+工程固定使用 AGP 8.5.2、Gradle 8.7、Kotlin 1.9.20、AndroidX Activity/WebKit/Lifecycle，JDK 17 和 Android SDK 34。`app` 模块直接复用仓库的 `src/`、`res/` 和离线 HTML，构建前会自动同步 `认知训练-离线版.html` 到 APK 的 assets；网页内容仍是 APK 内置的离线界面，并非独立网页产品。
+
+旧的 `android/build_apk.py` 仅保留作迁移前版本的历史回退参考；当前源码包含 AndroidX，默认请使用 Gradle。Gradle 产物位于 `android/app/build/outputs/apk/debug/app-debug.apk`，交付副本同步到 `android/认知训练.apk`。
+### 客户端说明
 
 `android/认知训练.apk` —— 0.41 MB，装到手机上就独立运行，**不需要电脑**。
 
@@ -1086,7 +1098,7 @@ JS 那一半（真图真接口，100% 命中）、以及两边规则一致（有
 
 **安装**：手机上打开 APK，系统会提示「允许安装未知来源应用」，同意即可。
 因为用的是调试签名，部分手机管家可能提示"未经验证的应用"，选继续安装。
-versionCode 已经是 23，**可以直接覆盖安装旧版，数据不丢**。
+versionCode 是 49，**可以直接覆盖安装旧版，数据不丢**。
 （这一次改的是原生拦截和设置页，网页侧的进度存在应用内部存储里，覆盖安装不动它。）
 
 **重新构建**（改了内容之后）：
@@ -1145,7 +1157,7 @@ py -3 tools/deliver.py          # 交付 + 清理（--dry 只看不删，--keep 
 
 现在 `build_offline.py` 会把全部输入（index.html / style.css / voice.js / app.js / icon.svg / 所有 data `*.json`，排除存档 progress.json）算一个 sha256，写进 `认知训练-离线版.src.txt`；`verify_offline.js` 重算并比对，对不上就失败并告诉你「重跑 build_offline.py」。全链于是闭合了：**源码 → HTML（已校验）→ APK（已校验）**。
 
-两个实现上的注意点：指纹文件用 `newline="\n"` 写（Windows 上默认会把 `\n` 翻成 `\r\n`，读回来每行多个 `\r`，路径全不存在，校验会永远红而原因和源码无关）；JS 侧再 trim 一次兜底。
+两个实现上的注意点：指纹文件用 `newline="\n"` 写（Windows 上默认会把 `\n` 翻成 `\n`，读回来每行多个 `\r`，路径全不存在，校验会永远红而原因和源码无关）；JS 侧再 trim 一次兜底。
 
 **这套校验原来只在 `verify_offline.js` 里，也就是"构建完之后"才生效——太晚。** 2.35 把它前移到了 `build_apk.py` 开头：构建前先重算指纹，和 `认知训练-离线版.src.txt` 里记的对不上就直接中止，并写明「先跑 `py -3 build_offline.py`」。
 
@@ -1576,4 +1588,3 @@ py -3 -c "import json;json.load(open('data/cards.json',encoding='utf-8'));print(
 造了一个「只改 version 不改内容」的坏脚本去试它——守卫抓住了（退出码 1，报「j04 还在文件里」）。
 
 微课 37 → 39，六个系列。
-

@@ -21,7 +21,6 @@
   App 里不包含任何 API 密钥：密钥由你自己粘贴一次，只存在手机本地。
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.local.cognitiontrainer"
     android:versionCode="49"
     android:versionName="2.47">
 
@@ -73,7 +72,6 @@
         android:hardwareAccelerated="true"
         android:allowBackup="true"
         android:usesCleartextTraffic="false"
-        android:extractNativeLibs="true"
         android:supportsRtl="false">
 
         <activity

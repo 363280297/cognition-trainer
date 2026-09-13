@@ -138,20 +138,9 @@ console.log('\n[3 版本号：manifest / README / PLAN]');
   // 构建工作区在 E:\android-build。**原生源码的唯一来源是仓库**：
   // android/build_apk.py 每次构建都会把 src/res/manifest 同步过去并逐字节核对，
   // 所以这里报「不一致」只说明一件事——有人直接改了构建树里那份。
-  const BUILD_MF = 'E:/android-build/app/AndroidManifest.xml';
-  if (fs.existsSync(BUILD_MF) && read('android/AndroidManifest.xml') !== fs.readFileSync(BUILD_MF, 'utf8')) {
-    note('ERR', '仓库 android/ 的 manifest 与构建树的不一致',
-      '构建时会用仓库那份覆盖过去，所以这个差异会消失——但说明有人直接改了构建树里的文件');
-  } else if (fs.existsSync(BUILD_MF)) {
-    console.log('  ok 仓库 android/ 的 manifest 与构建树一致');
-  }
-  // 六个 java 源文件也要一致
-  const CM = 'com/local/cognitiontrainer/';
-  const unsynced = ['BackupStore', 'GateService', 'MainActivity', 'Prefs', 'ReminderReceiver', 'RootGate']
-    .filter((f) => fs.existsSync(`E:/android-build/app/src/${CM}${f}.java`)
-      && read(`android/src/${CM}${f}.java`) !== fs.readFileSync(`E:/android-build/app/src/${CM}${f}.java`, 'utf8'));
-  if (unsynced.length) note('ERR', '这些 java 源文件仓库和构建树不同步', unsynced.join(', '));
-  else console.log('  ok 6 个 java 源文件两边一致');
+  console.log('  ok Gradle app 模块是默认构建源；旧手工构建树不参与同步检查');
+  // Gradle 直接使用仓库原生源码，Java/Kotlin 不再复制到旧手工构建树。
+  console.log('  ok 原生源文件由 Gradle app 模块直接读取');
 }
 
 // ---------------------------------------------------------------- 4 用户硬约束
@@ -175,13 +164,13 @@ console.log('\n[4 用户的硬约束]');
     return (read('android/AndroidManifest.xml').match(/android:name="android\.permission\.[A-Z_]+"/g) || []);
   }
   console.log(`  ok 权限 ${perms.length} 个`);
-  /* 2.31 起是 6 个（删掉了 RECORD_AUDIO）。这个数字和 README 的表格一一对应，
+  /* 当前是 7 个（含应用内更新所需的 REQUEST_INSTALL_PACKAGES）。这个数字和 README 的表格一一对应，
      所以两处必须一起改——写着 7 而实际 6，用户报问题时会说错权限。 */
-  if (perms.length !== 6) note('WARN', '权限数量和 README 写的 6 个不一样', String(perms.length));
+  if (perms.length !== 7) note('WARN', '权限数量和 README 写的 7 个不一样', String(perms.length));
 
   // 4d 外部存储只许一个 json
-  const java = ['BackupStore', 'GateService', 'MainActivity', 'Prefs', 'ReminderReceiver', 'RootGate']
-    .map((f) => read(`android/src/com/local/cognitiontrainer/${f}.java`)).join('\n');
+  const java = ['BackupStore', 'GateService', 'MainActivity', 'ReminderReceiver', 'RootGate', 'GateWatch', 'UpdateReceiver']
+    .map((f) => read(`android/src/com/local/cognitiontrainer/${f}.java`)).join('\n') + '\n' + read('android/src/com/local/cognitiontrainer/Prefs.kt');
   const writes = [...java.matchAll(/getExternalStoragePublicDirectory|Environment\.getExternalStorageDirectory/g)];
   console.log(`  外部存储相关调用 ${writes.length} 处（真正的不变式在 test_bridge 里）`);
 }

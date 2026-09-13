@@ -1,7 +1,11 @@
 package com.local.cognitiontrainer;
 
 import android.Manifest;
-import android.app.Activity;
+import androidx.activity.ComponentActivity;
+import androidx.webkit.WebViewAssetLoader;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
+import android.webkit.WebViewClient;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageInfo;
@@ -59,7 +63,7 @@ import java.util.Locale;
  * 密钥不写在这份代码里：由用户在 App 内粘贴一次，存在网页的 localStorage。
  * 这样 APK 本身不含任何凭证，反编译也拿不到。
  */
-public class MainActivity extends Activity {
+public class MainActivity extends ComponentActivity {
 
     private static final int REQ_NOTIF = 1002;
     private static final int REQ_STORAGE = 1003;
@@ -107,12 +111,21 @@ public class MainActivity extends Activity {
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
         s.setDatabaseEnabled(true);
-        s.setAllowFileAccess(true);
+        s.setAllowFileAccess(false);
         if (Build.VERSION.SDK_INT >= 16) {
             s.setAllowFileAccessFromFileURLs(false);
             s.setAllowUniversalAccessFromFileURLs(false);
         }
         s.setAllowContentAccess(false);
+
+        WebViewAssetLoader assetLoader = new WebViewAssetLoader.Builder()
+                .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this))
+                .build();
+        web.setWebViewClient(new WebViewClient() {
+            @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                return assetLoader.shouldInterceptRequest(request.getUrl());
+            }
+        });
         s.setSupportZoom(false);
         s.setBuiltInZoomControls(false);
         s.setDisplayZoomControls(false);
@@ -141,7 +154,7 @@ public class MainActivity extends Activity {
      *  判定仍然只有网页那一份，原生只是把「这次是被闸门拉起来的」这个事实传进去。 */
     private String startUrl(Intent intent) {
         boolean gate = intent != null && intent.getBooleanExtra(EXTRA_GATE, false);
-        return "file:///android_asset/index.html" + (gate ? "?gate=1" : "");
+        return "https://appassets.androidplatform.net/assets/index.html" + (gate ? "?gate=1" : "");
     }
 
     @Override
