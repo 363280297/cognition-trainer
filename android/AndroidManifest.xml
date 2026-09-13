@@ -20,9 +20,9 @@
 
   App 里不包含任何 API 密钥：密钥由你自己粘贴一次，只存在手机本地。
 -->
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    android:versionCode="49"
-    android:versionName="2.47">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.local.cognitiontrainer"
+    android:versionCode="50"
+    android:versionName="2.48">
 
     <!--
       闸门要「从已安装应用里挑」，就得能列出有启动图标的应用。
@@ -116,3 +116,5 @@
         </receiver>
     </application>
 </manifest>
+
+
