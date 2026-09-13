@@ -2754,7 +2754,7 @@ function setSectionHtml() {
     <p class="set-note">只更新题库、微课和五维题的 JSON。下载前会检查 HTTPS、版本和内容结构；失败会保留当前离线内容。</p>
     <label class="field"><span>更新清单地址（可选）</span><input id="updateUrl" type="url" value="${esc(settings().contentUpdateUrl || '')}" placeholder="https://你的域名/update-manifest.json"></label>
     <div class="row"><button class="primary" onclick="checkContentUpdate()">检查更新</button><button class="ghost" onclick="saveContentUpdateUrl()">保存地址</button></div>
-    <p class="set-note" id="updateStatus">尚未检查。</p>`;
+    <p class="set-note" id="updateStatus">尚未检查。</p><div id="apkUpdate" class="row"></div>`;
   if (setSection === 'data') return `
     <div class="set-h">数据</div>
     <p class="set-note">进度存在这台手机上，同时会自动写一份纯文本备份到「下载」目录——

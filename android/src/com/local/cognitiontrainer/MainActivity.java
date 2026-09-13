@@ -4,6 +4,10 @@ import android.Manifest;
 import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.pm.PackageInfo;
+import android.app.PendingIntent;
+import android.content.IntentSender;
+import android.content.pm.PackageInstaller;
 import android.content.pm.ResolveInfo;
 import android.database.Cursor;
 import android.media.AudioAttributes;
@@ -30,6 +34,10 @@ import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.security.MessageDigest;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URI;
@@ -959,6 +967,16 @@ public class MainActivity extends Activity {
             MainActivity.this.contentUpdateGet(url);
         }
 
+        @JavascriptInterface
+        public void downloadAndInstallApk(String url, String sha256, long versionCode) {
+            MainActivity.this.downloadAndInstallApk(url, sha256, versionCode);
+        }
+
+        @JavascriptInterface
+        public void openInstallPermissionSettings() {
+            MainActivity.this.openInstallPermissionSettings();
+        }
+
         // ---- 背景音乐（用户自己手机里的文件）----
         // 同上：这几个必须在 Bridge 里面，否则网页那边一调用就是
         // "EQNative.musicPlay is not a function"，而且只在真机上炸。
@@ -1160,6 +1178,77 @@ public class MainActivity extends Activity {
                 try { out.put("status", 0); out.put("error", String.valueOf(e.getMessage())); } catch (Exception ignored) { }
                 js("window.__onContentUpdate&&window.__onContentUpdate(" + q(out.toString()) + ")");
             } finally { if (c != null) c.disconnect(); }
+        }).start();
+    }
+
+    private void emitApkUpdate(String stage, int progress, String message) {
+        try {
+            JSONObject o = new JSONObject(); o.put("stage", stage); o.put("progress", progress); o.put("message", message == null ? "" : message);
+            js("window.__onApkUpdate&&window.__onApkUpdate(" + q(o.toString()) + ")");
+        } catch (Exception ignored) { }
+    }
+
+    private String sha256(File f) throws Exception {
+        MessageDigest md = MessageDigest.getInstance("SHA-256");
+        try (InputStream in = new FileInputStream(f)) {
+            byte[] buf = new byte[8192]; int n;
+            while ((n = in.read(buf)) > 0) md.update(buf, 0, n);
+        }
+        StringBuilder out = new StringBuilder();
+        for (byte b : md.digest()) out.append(String.format(Locale.US, "%02x", b));
+        return out.toString();
+    }
+
+    private void openInstallPermissionSettings() {
+        if (Build.VERSION.SDK_INT >= 26) {
+            try {
+                Intent it = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                        Uri.parse("package:" + getPackageName()));
+                startActivity(it);
+            } catch (Exception e) { toast("请在系统设置中允许本应用安装未知应用"); }
+        }
+    }
+
+    private void downloadAndInstallApk(final String url, final String expectedHash, final long expectedVersion) {
+        if (!isAllowedNetworkUrl(url)) { emitApkUpdate("error", 0, "只允许 HTTPS 公网下载地址"); return; }
+        if (Build.VERSION.SDK_INT >= 26 && !getPackageManager().canRequestPackageInstalls()) {
+            emitApkUpdate("permission", 0, "需要允许本应用安装未知应用"); return;
+        }
+        new Thread(() -> {
+            File part = new File(getCacheDir(), "cognition-update.apk.part");
+            File apk = new File(getFilesDir(), "cognition-update.apk");
+            HttpURLConnection c = null;
+            try {
+                emitApkUpdate("downloading", 0, "正在下载更新包");
+                c = (HttpURLConnection) new URL(url).openConnection(); c.setRequestMethod("GET");
+                c.setConnectTimeout(20000); c.setReadTimeout(120000); c.connect();
+                int code = c.getResponseCode(); if (code < 200 || code >= 300) throw new Exception("下载失败（" + code + "）");
+                int total = c.getContentLength(); long done = 0;
+                try (InputStream in = c.getInputStream(); FileOutputStream out = new FileOutputStream(part)) {
+                    byte[] buf = new byte[16384]; int n; int last = -1;
+                    while ((n = in.read(buf)) > 0) { out.write(buf, 0, n); done += n; int pct = total > 0 ? (int)(done * 100 / total) : -1; if (pct != last) { emitApkUpdate("downloading", pct, "正在下载更新包"); last = pct; } }
+                }
+                String got = sha256(part); if (expectedHash == null || !expectedHash.equalsIgnoreCase(got)) throw new Exception("更新包校验失败");
+                PackageInfo pi = getPackageManager().getPackageArchiveInfo(part.getAbsolutePath(), 0);
+                if (pi == null || !getPackageName().equals(pi.packageName)) throw new Exception("更新包不是本应用");
+                long archiveVersion = Build.VERSION.SDK_INT >= 28 ? pi.getLongVersionCode() : pi.versionCode;
+                long currentVersion = Build.VERSION.SDK_INT >= 28 ? getPackageManager().getPackageInfo(getPackageName(), 0).getLongVersionCode() : getPackageManager().getPackageInfo(getPackageName(), 0).versionCode;
+                if (archiveVersion <= currentVersion || (expectedVersion > 0 && archiveVersion != expectedVersion)) throw new Exception("版本号不符合更新条件");
+                if (apk.exists()) apk.delete(); if (!part.renameTo(apk)) throw new Exception("无法保存更新包");
+                emitApkUpdate("ready", 100, "更新包已下载，准备安装");
+                PackageInstaller installer = getPackageManager().getPackageInstaller();
+                PackageInstaller.SessionParams params = new PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL);
+                params.setAppPackageName(getPackageName()); params.setSize(apk.length());
+                int sessionId = installer.createSession(params);
+                PackageInstaller.Session session = installer.openSession(sessionId);
+                try (InputStream in = new FileInputStream(apk); OutputStream out = session.openWrite("base.apk", 0, apk.length())) {
+                    byte[] buf = new byte[16384]; int n; while ((n = in.read(buf)) > 0) out.write(buf, 0, n); session.fsync(out);
+                }
+                Intent result = new Intent(this, UpdateReceiver.class); result.putExtra("url", url);
+                PendingIntent piResult = PendingIntent.getBroadcast(this, sessionId, result, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+                session.commit(piResult.getIntentSender()); session.close(); emitApkUpdate("installing", 100, "系统即将显示安装确认");
+            } catch (Exception e) { emitApkUpdate("error", 0, e.getMessage()); if (part.exists()) part.delete(); }
+            finally { if (c != null) c.disconnect(); }
         }).start();
     }
 

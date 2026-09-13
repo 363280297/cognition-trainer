@@ -5019,13 +5019,21 @@ function renderTrainingReport() {
 
 function updateSettings() { try { return JSON.parse(localStorage.getItem('eq-settings-v1') || '{}'); } catch (e) { return {}; } }
 function saveContentUpdateUrl() { const u=(document.getElementById('updateUrl')||{}).value||''; const old=updateSettings(); old.contentUpdateUrl=u.trim(); localStorage.setItem('eq-settings-v1',JSON.stringify(old)); renderUpdateStatus('地址已保存'); }
-function renderUpdateStatus(msg) { const el=document.getElementById('updateStatus'); if(el) el.textContent=msg || localStorage.getItem('eq-content-update-status-v1') || '尚未检查。'; }
+function renderUpdateStatus(msg) { const el=document.getElementById('updateStatus'); if(el) el.textContent=msg || localStorage.getItem('eq-content-update-status-v1') || '尚未检查。'; renderApkOffer(); }
+function renderApkOffer() { const el=document.getElementById('apkUpdate'); if(!el) return; let p=null; try{p=JSON.parse(localStorage.getItem('eq-apk-update-v1')||'null')}catch(e){}; el.innerHTML=p&&p.url?`<button class="ghost" onclick="installApkUpdate()">下载并安装 APK v${esc(String(p.version||''))}</button>`:''; }
 function updateStatus(msg) { localStorage.setItem('eq-content-update-status-v1',msg); renderUpdateStatus(msg); }
 function validateContentPackage(pkg) {
   if (!pkg || typeof pkg !== 'object' || !Number.isInteger(pkg.version) || !pkg.content) return false;
   const c=pkg.content;
   return (!c.cards || Array.isArray(c.cards.cards)) && (!c.frames || Array.isArray(c.frames.frames)) && (!c.curriculum || Array.isArray(c.curriculum.lessons));
 }
+function installApkUpdate() {
+  let p=null; try{p=JSON.parse(localStorage.getItem('eq-apk-update-v1')||'null')}catch(e){};
+  if(!p||!p.url||!p.sha256){updateStatus('更新包信息不完整，先重新检查更新。');return;}
+  window.__onApkUpdate=function(o){ if(o.stage==='permission'){updateStatus('请先允许本应用安装未知应用。'); if(window.EQNative&&EQNative.openInstallPermissionSettings) EQNative.openInstallPermissionSettings();} else if(o.stage==='error') updateStatus('APK 更新失败：'+(o.message||'未知错误')); else if(o.stage==='ready') updateStatus('更新包已下载，正在调起系统安装确认。'); else if(o.stage==='downloading') updateStatus(`正在下载 APK：${o.progress>=0?o.progress+'%':'处理中'}`); else if(o.stage==='installing') updateStatus('系统安装确认即将出现。'); };
+  if(window.EQNative&&EQNative.downloadAndInstallApk) EQNative.downloadAndInstallApk(p.url,p.sha256,Number(p.version)||0); else updateStatus('APK 安装功能只在 Android App 内可用。');
+}
+
 function checkContentUpdate() {
   const u=(document.getElementById('updateUrl')||{}).value || updateSettings().contentUpdateUrl || '';
   if (!/^https:\/\/[^\s]+$/i.test(u)) { updateStatus('请填写 HTTPS 更新清单地址。'); return; }
@@ -5038,6 +5046,7 @@ function checkContentUpdate() {
       const current=Number(localStorage.getItem('eq-content-version-v1') || 0);
       if (pkg.version <= current) { updateStatus(`当前已是最新内容（v${current || pkg.version}）。`); return; }
       if (!validateContentPackage(pkg)) throw Error('内容结构不完整');
+      if (pkg.latestApkVersion && pkg.apkUrl) { localStorage.setItem('eq-apk-update-v1', JSON.stringify({version:pkg.latestApkVersion,url:pkg.apkUrl,sha256:pkg.apkSha256||''})); }
       Object.assign(CONTENT, pkg.content);
       localStorage.setItem('eq-content-override-v1', JSON.stringify(pkg.content));
       localStorage.setItem('eq-content-version-v1', String(pkg.version));
