@@ -13,6 +13,10 @@ App 继续采用原生 Android WebView 容器，HTML、CSS、JavaScript 和内�
 
 在线内容更新采用 HTTPS 版本清单、SHA-256 校验、结构校验、临时文件下载和原子替换。内置内容始终可回退，网络失败、校验失败或内容不完整时不影响离线使用。APK 更新只做版本提示和手动下载入口，保留用户对安装行为的控制。
 
+## Android 框架层
+
+在现有轻量 Java/WebView 工程中加入 AndroidX Core、Activity 和 WebKit 兼容能力。AndroidX 只承担兼容 API、安全 WebView 配置、生命周期和后续测试扩展，不改变当前内容层和离线优先产品逻辑。构建脚本通过固定版本的本地依赖包编译，避免构建时隐式下载。
+
 ## 模块
 
 ### 1. 题库与自适应
