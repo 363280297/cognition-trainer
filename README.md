@@ -1072,7 +1072,7 @@ JS 那一半（真图真接口，100% 命中）、以及两边规则一致（有
 | 特殊权限（不在 manifest 里，要手动开） | 无障碍服务、root（仅「深度拦截」用，可选） |
 | 签名 | 调试证书（v2 + v3 方案通过校验） |
 
-**关于权限**（2.31 起 6 个；`RECORD_AUDIO` 已经删掉，因为不再录音）：`INTERNET` 是对话用的，`POST_NOTIFICATIONS` 和 `RECEIVE_BOOT_COMPLETED` 是为每日提醒（重启后要能把提醒装回去），`SYSTEM_ALERT_WINDOW` 是为闸门浮层。**root 不出现在权限列表里**——它不是一个 manifest 权限，而是运行时去跑 `su`；不 root 也不影响任何其它功能，只是「深度拦截」那一项没有。离线模块（卡片/校准/课程/脑雾）完全不碰网络，也不需要任何权限。
+**关于权限**（当前 7 个；`RECORD_AUDIO` 已经删掉，因为不再录音）：`INTERNET` 是对话用的，`POST_NOTIFICATIONS` 和 `RECEIVE_BOOT_COMPLETED` 是为每日提醒（重启后要能把提醒装回去），`SYSTEM_ALERT_WINDOW` 是为闸门浮层，`REQUEST_INSTALL_PACKAGES` 用于用户确认 APK 更新。**root 不出现在权限列表里**——它不是一个 manifest 权限，而是运行时去跑 `su`；不 root 也不影响任何其它功能，只是「深度拦截」那一项没有。离线模块（卡片/校准/课程/脑雾）完全不碰网络，也不需要任何权限。
 
 ### 场景对话第一次使用要配置
 
