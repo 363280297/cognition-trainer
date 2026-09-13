@@ -669,6 +669,9 @@ button.plain {
 }
 .gate-in { width: 100%; max-width: 560px; }
 .gate-top { margin-bottom: var(--sp-3); }
+.gate-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.gate-skip { flex:0 0 auto; padding:7px 12px; border:1px solid var(--line); border-radius:999px; background:rgba(255,255,255,.04); color:var(--dim); font-size:var(--fs-sm); }
+.gate-skip:active { transform:translateY(1px); }
 .gate-top h2 { margin-top: 8px; font-size: var(--fs-xl); }
 
 .mono-line {

@@ -127,11 +127,31 @@ public class GateService extends AccessibilityService {
             box.setFocusableInTouchMode(true);
             box.requestFocus();
 
+            LinearLayout top = new LinearLayout(this);
+            top.setOrientation(LinearLayout.HORIZONTAL);
+            top.setGravity(Gravity.CENTER_VERTICAL);
+            top.setLayoutParams(new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+
             TextView title = new TextView(this);
             title.setText(canSkip ? "先做完今天的量" : "今天已经跳过一次了");
             title.setTextColor(Color.parseColor("#F2EDFF"));
             title.setTextSize(23);
-            box.addView(title);
+            top.addView(title, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+            if (canSkip) {
+                Button skipTop = new Button(this);
+                skipTop.setText("跳过");
+                skipTop.setTextSize(13);
+                skipTop.setAllCaps(false);
+                skipTop.setOnClickListener(v -> {
+                    Prefs.markDailySkipped(GateService.this);
+                    hideOverlay();
+                });
+                top.addView(skipTop, new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+            }
+            box.addView(top);
 
             TextView sum = new TextView(this);
             sum.setText(Prefs.gateSummary(this));
@@ -175,14 +195,6 @@ public class GateService extends AccessibilityService {
             gp.topMargin = dp(28);
             go.setLayoutParams(gp);
             box.addView(go);
-
-            if (canSkip) {
-                Button skip = new Button(this);
-                skip.setText("今天先跳过这次");
-                skip.setTextSize(14);
-                skip.setOnClickListener(v -> hideOverlay());
-                box.addView(skip);
-            }
 
             // 保留卸载出口提示，并区分应用内数据与已保存的外部备份。
             TextView route = new TextView(this);

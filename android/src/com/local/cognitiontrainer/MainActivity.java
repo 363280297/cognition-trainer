@@ -595,6 +595,15 @@ public class MainActivity extends ComponentActivity {
         GateService.refreshIfComplete();
         }
 
+        @JavascriptInterface
+        public boolean dailySkipped() { return Prefs.dailySkipped(MainActivity.this); }
+
+        @JavascriptInterface
+        public void markDailySkipped() {
+            Prefs.markDailySkipped(MainActivity.this);
+            GateService.refreshIfComplete();
+        }
+
         /**
          * 深度拦截开关。拦到目标应用之后，除了挤到后台还真的把它杀掉。
          *

@@ -30,13 +30,21 @@ object Prefs {
     }
 
     @JvmStatic fun gateCanSkip(c: Context): Boolean =
-        if (today(c) != sp(c).getString("gateDate", "")) true else sp(c).getBoolean("gateCanSkip", false)
+        if (today(c) != sp(c).getString("gateDate", "")) true else !dailySkipped(c) && sp(c).getBoolean("gateCanSkip", false)
 
     @JvmStatic fun isArmed(c: Context): Boolean {
         val enabled = sp(c).getBoolean("gateEnabled", sp(c).getBoolean("armed", false))
-        return enabled && !dailyMet(c)
+        return enabled && !dailyMet(c) && !dailySkipped(c)
     }
     @JvmStatic fun packages(c: Context): String = sp(c).getString("packages", "[]").orEmpty()
+    @JvmStatic fun dailySkipped(c: Context): Boolean =
+        sp(c).getString("dailyDate", "") == today(c) && sp(c).getBoolean("dailySkipped", false)
+
+    @JvmStatic fun markDailySkipped(c: Context) {
+        sp(c).edit().putBoolean("dailySkipped", true).putString("dailyDate", today(c))
+            .putBoolean("gateCanSkip", false).commit()
+    }
+
     @JvmStatic fun setDeepBlock(c: Context, on: Boolean) = sp(c).edit().putBoolean("deepBlock", on).apply()
     @JvmStatic fun deepBlock(c: Context): Boolean = sp(c).getBoolean("deepBlock", false)
     @JvmStatic fun setGateWatch(c: Context, on: Boolean) = sp(c).edit().putBoolean("gateWatch", on).apply()

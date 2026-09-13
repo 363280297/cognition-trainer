@@ -2858,6 +2858,10 @@ function skipDaily() {
   state.daily.skipped = true;
   state.daily.skippedAt = Date.now();
   save();
+  if (window.EQNative && EQNative.markDailySkipped) {
+    try { EQNative.markDailySkipped(); } catch (e) { /* 非 Android 环境 */ }
+  }
+  syncGate();
   toast('今天跳过了一次。第二次打开就没有跳过按钮了。');
   closeGate();
 }
@@ -2957,8 +2961,11 @@ function openGate(forced) {
   el.innerHTML = `
     <div class="gate-in">
       <div class="gate-top">
-        <div class="meta"><span class="tag dom">每日计划</span>
-          <span class="tag">${p.met ? '已达标' : '还没达标'}</span></div>
+        <div class="gate-heading">
+          <div class="meta"><span class="tag dom">每日计划</span>
+            <span class="tag">${p.met ? '已达标' : '还没达标'}</span></div>
+          ${p.canSkip && !forced ? `<button class="gate-skip" onclick="skipDaily()">跳过</button>` : ''}
+        </div>
         <h2>${forced ? '先做完今天的量，再打开这个' : '今天的量很小'}</h2>
       </div>
       <div class="card">
@@ -2972,9 +2979,7 @@ function openGate(forced) {
         <div class="row">
           <button class="primary" onclick="gotoDailyWork()">现在做（${p.need - p.done} 步）</button>
         </div>
-        ${p.canSkip && !forced ? `
-          <div class="row"><button class="ghost" onclick="skipDaily()">今天先跳过</button></div>
-          <p class="hint">${esc(sr.once || '')}</p>` : ''}
+        ${p.canSkip && !forced ? `<p class="hint">${esc(sr.once || '')}</p>` : ''}
         ${!p.canSkip && !p.met && !p.d.skipped ? '' : ''}
         ${p.skipped && !p.met ? `<div class="warnbox" style="margin-top:12px">
           ${esc(sr.used || '')}
@@ -5045,9 +5050,12 @@ function checkContentUpdate() {
       if (!result || result.status < 200 || result.status >= 300) throw Error((result && result.error) || '网络请求失败');
       const pkg=JSON.parse(result.body || '{}');
       const current=Number(localStorage.getItem('eq-content-version-v1') || 0);
-      if (pkg.version <= current) { updateStatus(`当前已是最新内容（v${current || pkg.version}）。`); return; }
+      // APK 更新与内容版本独立：内容已是最新时，也不能提前 return 掉 APK 信息。
+      if (pkg.latestApkVersion && pkg.apkUrl && pkg.apkSha256) {
+        localStorage.setItem('eq-apk-update-v1', JSON.stringify({version:pkg.latestApkVersion,url:pkg.apkUrl,sha256:pkg.apkSha256}));
+      }
+      if (pkg.version <= current) { renderApkOffer(); updateStatus(`当前内容已是最新（v${current || pkg.version}）。`); return; }
       if (!validateContentPackage(pkg)) throw Error('内容结构不完整');
-      if (pkg.latestApkVersion && pkg.apkUrl) { localStorage.setItem('eq-apk-update-v1', JSON.stringify({version:pkg.latestApkVersion,url:pkg.apkUrl,sha256:pkg.apkSha256||''})); }
       Object.assign(CONTENT, pkg.content);
       localStorage.setItem('eq-content-override-v1', JSON.stringify(pkg.content));
       localStorage.setItem('eq-content-version-v1', String(pkg.version));
@@ -5148,6 +5156,17 @@ document.querySelectorAll('#tabs button').forEach((b) => {
   } catch (e) {
     toast('内容加载失败，请确认服务已启动');
   }
+  // 原生闸门的跳过按钮发生在独立浮层，网页未必能及时收到点击。
+  // 启动时从原生补回当天跳过状态，避免网页下一次 syncGate() 把闸门重新打开。
+  try {
+    if (window.EQNative && EQNative.dailySkipped && EQNative.dailySkipped()) {
+      rollDaily();
+      state.daily.skipped = true;
+      state.daily.skippedAt = state.daily.skippedAt || Date.now();
+      save(false);
+    }
+  } catch (e) { /* 浏览器/旧版原生桥没有该方法 */ }
+
   try {
     const override = JSON.parse(localStorage.getItem('eq-content-override-v1') || 'null');
     if (override && typeof override === 'object') Object.assign(CONTENT, override);
