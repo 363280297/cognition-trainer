@@ -141,6 +141,7 @@ function settings() {
     audioTrack: '',      // 空 = 用 data/audio.json 里的 default_track
     audioVolume: 0.22,   // 默认偏小：背景声不该盖过她说话，也不该伤听力
     audioAsk: true,
+    contentUpdateUrl: 'https://raw.githubusercontent.com/363280297/cognition-trainer/master/docs/update-manifest.json',
   }, s);
 }
 
@@ -3557,6 +3558,8 @@ async function onShotsPicked(files) {
     if (typeof shotDone === 'function') shotDone(null, e.message);
   }
 }
+
+
 
 
 
