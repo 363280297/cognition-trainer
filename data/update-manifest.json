@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "minAppVersion": "2.47",
+  "content": {},
+  "note": "将此文件部署到 HTTPS 地址，并在 App 设置中填写地址；内容包需包含 cards/frames/curriculum 等结构。"
+}

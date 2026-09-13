@@ -85,6 +85,7 @@ const started = Date.now();
       fillPlan(session.queue[0].id); savePlan(session.queue[0].id);
       renderPlans();
     });
+    await page.evaluate(() => document.querySelectorAll('.sheet, .gate').forEach((e) => e.remove()));
     await page.getByRole('button', { name: '看这道题', exact: true }).last().click();
     assert.ok((await page.locator('.scene').textContent()).includes('补光灯'));
     await page.setViewportSize({ width: 900, height: 900 });

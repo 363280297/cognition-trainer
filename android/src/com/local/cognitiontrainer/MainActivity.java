@@ -32,6 +32,7 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -99,6 +100,10 @@ public class MainActivity extends Activity {
         s.setDomStorageEnabled(true);
         s.setDatabaseEnabled(true);
         s.setAllowFileAccess(true);
+        if (Build.VERSION.SDK_INT >= 16) {
+            s.setAllowFileAccessFromFileURLs(false);
+            s.setAllowUniversalAccessFromFileURLs(false);
+        }
         s.setAllowContentAccess(false);
         s.setSupportZoom(false);
         s.setBuiltInZoomControls(false);
@@ -1061,8 +1066,27 @@ public class MainActivity extends Activity {
     /** 真正的实现。注意这里**没有** @JavascriptInterface——它在 Bridge 外面，
      *  加了也不会被暴露给网页（这正是之前那个 bug 的成因）。
      *  网页调用的是 Bridge 里那两个转发方法。 */
+    private boolean isAllowedNetworkUrl(String raw) {
+        try {
+            URI u = new URI(raw);
+            String scheme = u.getScheme();
+            String host = u.getHost();
+            if (!"https".equalsIgnoreCase(scheme) || host == null || host.isEmpty()) return false;
+            String h = host.toLowerCase(java.util.Locale.US);
+            if (h.equals("localhost") || h.equals("127.0.0.1") || h.equals("::1") || h.startsWith("10.") || h.startsWith("192.168.") || h.startsWith("172.16.") || h.startsWith("172.17.") || h.startsWith("172.18.") || h.startsWith("172.19.") || h.startsWith("172.20.") || h.startsWith("172.21.") || h.startsWith("172.22.") || h.startsWith("172.23.") || h.startsWith("172.24.") || h.startsWith("172.25.") || h.startsWith("172.26.") || h.startsWith("172.27.") || h.startsWith("172.28.") || h.startsWith("172.29.") || h.startsWith("172.30.") || h.startsWith("172.31.")) return false;
+            return true;
+        } catch (Exception e) { return false; }
+    }
+
+    private void rejectNetwork(String reqId, String message) {
+        JSONObject out = new JSONObject();
+        try { out.put("status", 400); out.put("error", message); } catch (Exception ignored) { }
+        js("window.__onHttp&&window.__onHttp(" + q(reqId) + "," + q(out.toString()) + ")");
+    }
+
     public void httpPost(final String reqId, final String url,
                          final String headersJson, final String body) {
+        if (!isAllowedNetworkUrl(url)) { rejectNetwork(reqId, "仅允许 HTTPS 公网地址"); return; }
         new Thread(() -> {
             HttpURLConnection c = null;
             try {
@@ -1109,6 +1133,7 @@ public class MainActivity extends Activity {
 
     /** 也支持 GET，方便以后扩展 */
     public void httpGet(final String reqId, final String url, final String headersJson) {
+        if (!isAllowedNetworkUrl(url)) { rejectNetwork(reqId, "仅允许 HTTPS 公网地址"); return; }
         new Thread(() -> {
             HttpURLConnection c = null;
             try {

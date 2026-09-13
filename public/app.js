@@ -97,7 +97,7 @@ let cardTimer = null;
 let wrongStreak = 0;
 let cardDomain = '全部';
 let lessonSeries = '全部';
-const DOMAINS = ['全部', '恋爱', '职场', '朋友', '家人', '泛社交'];
+const DOMAINS = ['全部', '人际判断', '沟通表达', '亲密关系', '边界冲突', '自我调节', '五维认知'];
 
 /* ---------------------------------------------------------- 偏差画像
    准确率告诉你「对了多少」，偏差告诉你「往哪边歪」。这两个是独立的东西：
@@ -502,6 +502,10 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
  * 属性值里出现 <b> 反而会显示成字面标签。 */
 const rich = (s) => esc(s).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
 
+function localDateKey(d = new Date()) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function todayStr() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -691,7 +695,7 @@ function weightedPick(arr, n, focus) {
 
 function buildQueue(mode) {
   const now = Date.now();
-  const all = CONTENT.cards.cards.filter((c) => cardDomain === '全部' || c.domain === cardDomain);
+  const all = CONTENT.cards.cards.filter((c) => cardDomain === '全部' || c.category === cardDomain || c.domain === cardDomain);
   if (mode === 'wrong') {
     return state.stats.wrongIds
       .map((id) => all.find((c) => c.id === id)).filter(Boolean)
@@ -733,10 +737,10 @@ function focusBar() {
 /** 领域筛选条：只在有筛选价值时出现 */
 function domainBar() {
   const counts = {};
-  CONTENT.cards.cards.forEach((c) => { counts[c.domain] = (counts[c.domain] || 0) + 1; });
+  CONTENT.cards.cards.forEach((c) => { counts[c.category || c.domain] = (counts[c.category || c.domain] || 0) + 1; });
   const avail = DOMAINS.filter((d) => d === '全部' || counts[d]);
   if (avail.length <= 2) return '';
-  const families = CONTENT.cards.cards.filter((c) => cardDomain === '全部' || c.domain === cardDomain);
+  const families = CONTENT.cards.cards.filter((c) => cardDomain === '全部' || c.category === cardDomain || c.domain === cardDomain);
   const total = families.reduce((n, c) => n + cardForms(c).length, 0);
   return `<div class="hint" style="margin-bottom:8px">${families.length} 组 · ${total} 道完整题目 · 同考点轮换练习</div>
     <div class="chips">${avail.map((d) => `
@@ -761,7 +765,7 @@ const TYPE_NAME = {
 };
 
 let cardsView = 'drill';     // drill | plans | bias（后两个只由「成长」那一路设置）
-let growthSubview = 'stages';  // stages | bias | plans
+let growthSubview = 'stages';  // stages | bias | plans | report
 
 /* ------------------------------------------------------------ 读局：先分类
  *
@@ -1177,7 +1181,7 @@ function answerCard(chosen) {
     if (!genreOk) recordBias('误判场合');
     state.answers.push({
       t: Date.now(), id: card.id + '#genre', formId: card.formId || card.id,
-      err: genreOk ? '正解' : '误判场合', ok: genreOk,
+      err: genreOk ? '正解' : '误判场合', category: card.category || '人际判断', ok: genreOk,
     });
     if (state.answers.length > 300) state.answers = state.answers.slice(-300);
   }
@@ -1191,7 +1195,7 @@ function answerCard(chosen) {
     clueOk = !!(card.clues[idx] && card.clues[idx].ok);
     state.answers.push({
       t: Date.now(), id: card.id + '#clue', formId: card.formId || card.id,
-      err: clueOk ? '正解' : '依据没找对', ok: clueOk,
+      err: clueOk ? '正解' : '依据没找对', category: card.category || '人际判断', ok: clueOk,
     });
     if (state.answers.length > 300) state.answers = state.answers.slice(-300);
   }
@@ -1200,7 +1204,7 @@ function answerCard(chosen) {
   state.dailyMix.lastFamilies = [card.id].concat(state.dailyMix.lastFamilies || []).slice(0, 6);
   state.dailyMix.lastSkills = [card.skill || card.stage || ''].concat(state.dailyMix.lastSkills || []).slice(0, 6);
   state.answers.push({ t: Date.now(), id: card.id, formId: card.formId || card.id,
-    answerKey: picked.answerKey || chosen, err: (ok || half) ? '正解' : (picked.err || '正解'), ok: !!ok });
+    answerKey: picked.answerKey || chosen, err: (ok || half) ? '正解' : (picked.err || '正解'), category: card.category || '人际判断', ok: !!ok });
   if (state.answers.length > 300) state.answers = state.answers.slice(-300);
 
   const others = card.options.filter((o) => o.id !== chosen && o.id !== card.best);
@@ -4874,7 +4878,7 @@ const SUBNAV = {
     // 在这个项目里出过好几次。
     `<button class="chip-btn subnav-act" onclick="openTalkHistory()"
        title="以前练过的对话和当时的分析">📋 ${typeof talkCountLabel === 'function' ? talkCountLabel() : '历史'}</button>`),
-  growth: () => subTabs([['stages', '阶段'], ['bias', '偏差画像'], ['plans', '我的预案']],
+  growth: () => subTabs([['stages', '阶段'], ['bias', '偏差画像'], ['plans', '我的预案'], ['report', '训练报告']],
     growthSubview, 'setGrowthSubview'),
 };
 
@@ -4969,7 +4973,7 @@ function frameOfDay() {
   /* 每天只抽一道；在保持日期稳定的前提下，优先补充近期正确率低的维度，
      没有数据的维度先轮换，避免用户永远只被考同一类。 */
   const scored=dims.map((dim,i)=>{const z=stats[dim]||{};const seen=Number(z.seen)||0;const acc=seen?Number(z.correct||0)/seen:0;return {dim,i,score:(seen?1-acc:1.2)+(i/dims.length)*0.001};}).sort((a,b)=>b.score-a.score);
-  const day=Number(new Date().toISOString().slice(0,10).replace(/-/g,''));
+  const day=Number(localDateKey(new Date()).replace(/-/g,''));
   const dim=scored[day%scored.length].dim;
   const pool=list.filter(x=>x.dimension===dim);
   return pool[day%pool.length]||list[day%list.length];
@@ -4991,6 +4995,59 @@ function answerFrame(i) { const f=frameOfDay(); if(!f)return; const ok=i===f.ans
  * 那一层里「我的预案」和「偏差画像」根本不是练习，是看进度，所以它们搬到成长，
  * 卡片那一路就只剩一层。用户的原话是「很多窗口可以归为一类」「不要把它摊开」——
  * 归并的判据就是「这是练的，还是看的」，不是「它原来是哪个菜单里的」。 */
+function buildTrainingReport(s = state, now = Date.now()) {
+  const answers = Array.isArray(s.answers) ? s.answers : [];
+  const recent = answers.filter(x => x && Number(x.t || 0) >= now - 30 * 864e5);
+  const week = answers.filter(x => x && Number(x.t || 0) >= now - 7 * 864e5);
+  const total = recent.length, correct = recent.filter(x => x.ok).length;
+  const errors = {}; recent.filter(x => !x.ok && x.err).forEach(x => errors[x.err] = (errors[x.err] || 0) + 1);
+  const categories = {}; recent.filter(x => x.category).forEach(x => { categories[x.category] = categories[x.category] || {seen:0,correct:0}; categories[x.category].seen++; if(x.ok)categories[x.category].correct++; });
+  const dimensions = {}; Object.entries(s.frameStats || {}).forEach(([k,v]) => { dimensions[k] = {seen:Number(v.seen)||0, correct:Number(v.correct)||0}; });
+  const days = new Set((s.dailyLog || []).concat([s.daily || {}]).filter(x => x.met && x.date).map(x => x.date));
+  return { total, correct, accuracy: total ? Math.round(correct / total * 100) : 0, weekCount: week.length, errors, categories, dimensions, completedDays: days.size };
+}
+function renderTrainingReport() {
+  const r = buildTrainingReport();
+  const errRows = Object.entries(r.errors).sort((a,b)=>b[1]-a[1]);
+  const catRows = Object.entries(r.categories).sort((a,b)=>b[1].seen-a[1].seen);
+  const dimRows = Object.entries(r.dimensions);
+  $('#view').innerHTML = `<div class="card report-head"><div class="meta"><span class="tag dom">训练报告</span><span class="tag">近 30 天</span></div><h2>看清自己卡在哪里</h2><p class="hint">报告只统计已经发生的作答，用来决定下一阶段多练什么，不给你贴固定标签。</p><div class="score-row"><div><b>${r.accuracy}%</b><span>近 30 天命中</span></div><div><b>${r.weekCount}</b><span>近 7 天作答</span></div><div><b>${r.completedDays}</b><span>达标天数</span></div></div></div>
+  ${r.total ? `<div class="card"><h3>最常见的失误</h3>${errRows.length ? errRows.map(([k,v])=>`<div class="report-row"><span>${esc(k)}</span><b>${v} 次</b></div>`).join('') : '<p class="hint">近 30 天没有记录到错误。</p>'}</div>` : `<div class="card"><h3>还没有足够记录</h3><p class="hint">先完成几次普通题和每日第六题，报告会逐渐出现。</p><div class="row"><button class="primary" onclick="goPracticeCards()">去做一题</button></div></div>`}
+  <div class="card"><h3>六类能力</h3>${catRows.length ? catRows.map(([k,v])=>`<div class="report-row"><span>${esc(k)}</span><span>${v.correct}/${v.seen} · ${Math.round(v.correct/v.seen*100)}%</span></div>`).join('') : '<p class="hint">完成普通题后显示。</p>'}</div>
+  <div class="card"><h3>五维题</h3>${dimRows.length ? dimRows.map(([k,v])=>`<div class="report-row"><span>${esc(k)}</span><span>${v.correct}/${v.seen} · ${Math.round(v.correct/v.seen*100)}%</span></div>`).join('') : '<p class="hint">每日只做一道，完成后这里会记录你的五维迁移情况。</p>'}</div>`;
+}
+
+function updateSettings() { try { return JSON.parse(localStorage.getItem('eq-settings-v1') || '{}'); } catch (e) { return {}; } }
+function saveContentUpdateUrl() { const u=(document.getElementById('updateUrl')||{}).value||''; const old=updateSettings(); old.contentUpdateUrl=u.trim(); localStorage.setItem('eq-settings-v1',JSON.stringify(old)); renderUpdateStatus('地址已保存'); }
+function renderUpdateStatus(msg) { const el=document.getElementById('updateStatus'); if(el) el.textContent=msg || localStorage.getItem('eq-content-update-status-v1') || '尚未检查。'; }
+function updateStatus(msg) { localStorage.setItem('eq-content-update-status-v1',msg); renderUpdateStatus(msg); }
+function validateContentPackage(pkg) {
+  if (!pkg || typeof pkg !== 'object' || !Number.isInteger(pkg.version) || !pkg.content) return false;
+  const c=pkg.content;
+  return (!c.cards || Array.isArray(c.cards.cards)) && (!c.frames || Array.isArray(c.frames.frames)) && (!c.curriculum || Array.isArray(c.curriculum.lessons));
+}
+function checkContentUpdate() {
+  const u=(document.getElementById('updateUrl')||{}).value || updateSettings().contentUpdateUrl || '';
+  if (!/^https:\/\/[^\s]+$/i.test(u)) { updateStatus('请填写 HTTPS 更新清单地址。'); return; }
+  saveContentUpdateUrl();
+  const id='content-update-'+Date.now();
+  window.__contentUpdateDone = function(result) {
+    try {
+      if (!result || result.status < 200 || result.status >= 300) throw Error('网络请求失败');
+      const pkg=JSON.parse(result.body || '{}');
+      const current=Number(localStorage.getItem('eq-content-version-v1') || 0);
+      if (pkg.version <= current) { updateStatus(`当前已是最新内容（v${current || pkg.version}）。`); return; }
+      if (!validateContentPackage(pkg)) throw Error('内容结构不完整');
+      Object.assign(CONTENT, pkg.content);
+      localStorage.setItem('eq-content-override-v1', JSON.stringify(pkg.content));
+      localStorage.setItem('eq-content-version-v1', String(pkg.version));
+      updateStatus(`更新完成：内容 v${pkg.version}，进度保留。`); renderHeader(); go('today');
+    } catch (e) { updateStatus(`更新失败：${e.message} 当前离线内容仍可用。`); }
+  };
+  if (window.EQNative && EQNative.httpGet) EQNative.httpGet(id, u, '{}');
+  else fetch(u).then(r=>r.text().then(body=>window.__contentUpdateDone({status:r.status,body}))).catch(()=>window.__contentUpdateDone({status:0}));
+}
+
 const VIEWS = {
   today: renderToday,
   practice: () => {
@@ -5009,7 +5066,8 @@ const VIEWS = {
   growth: () => {
     if (growthSubview === 'stages') renderStages();
     else if (growthSubview === 'bias') { cardsView = 'bias'; viewCards(); }
-    else { cardsView = 'plans'; viewCards(); }
+    else if (growthSubview === 'plans') { cardsView = 'plans'; viewCards(); }
+    else renderTrainingReport();
   },
 };
 
@@ -5078,6 +5136,11 @@ document.querySelectorAll('#tabs button').forEach((b) => {
   } catch (e) {
     toast('内容加载失败，请确认服务已启动');
   }
+  try {
+    const override = JSON.parse(localStorage.getItem('eq-content-override-v1') || 'null');
+    if (override && typeof override === 'object') Object.assign(CONTENT, override);
+  } catch (e) { /* 损坏的更新包回退内置内容 */ }
+
   try {
     const r = await fetch('/api/progress');
     const j = await r.json();

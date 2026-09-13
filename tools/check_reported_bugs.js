@@ -41,12 +41,14 @@ const WHO_SRC = `(() => {
   if (id('ckText')) return 'AI:表达体检';
   if (id('rpChat') || id('rpOut')) return 'AI:真实复盘';
   if (id('opts') || id('genreStep')) return '练习:卡片';
+  if (has('.extra-choice')) return '练习:加练';
   if (has('.lesson-item')) return '练习:微课';
   if (has('.sg-dots') || has('.sg-btns') || has('.sg-review')) return '练习:信号场';
   if (has('.scene')) return '练习:语境校准';
   if (has('.plan-card')) return '成长:我的预案';
   if (has('.bias-card')) return '成长:偏差画像';
   if (has('.today-card')) return '今天';
+  if (has('.report-head')) return '成长:训练报告';
   if (has('.stage-head') || has('.daily-card')) return '成长:阶段';
   /* 空数据时上面几个类都不存在（一个 .card + 一个 h2）。
      这一组页面本来就靠标题区分，所以按标题认——用整串精确匹配，
@@ -137,9 +139,9 @@ const WHO_SRC = `(() => {
      「📋 历史」）。所以这里按 .subnav-tab 数子页；动作入口单独验，且必须带
      .subnav-act——否则就是把一个点了不换页的东西混进了子页队列里，那才是真 bug。 */
   const SUBTABS = {
-    practice: ['练习:卡片', '练习:语境校准', '练习:微课', '练习:信号场', '练习:闲聊'],
+    practice: ['练习:卡片', '练习:加练', '练习:语境校准', '练习:微课', '练习:信号场', '练习:闲聊'],
     ai: ['AI:场景对话', 'AI:表达体检', 'AI:真实复盘'],
-    growth: ['成长:阶段', '成长:偏差画像', '成长:我的预案'],
+    growth: ['成长:阶段', '成长:偏差画像', '成长:我的预案', '成长:训练报告'],
   };
   const ACTS = { practice: 0, ai: 1, growth: 0 };
   for (const tab of ['practice', 'ai', 'growth']) {

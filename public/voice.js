@@ -2675,7 +2675,7 @@ function talkCountLabel() {
  */
 const SET_SECTIONS = [
   ['sound', '声音'], ['ai', 'AI 陪练'], ['daily', '计划与提醒'],
-  ['gate', '闸门'], ['data', '数据'], ['about', '关于'],
+  ['gate', '闸门'], ['data', '数据'], ['update', '内容更新'], ['about', '关于'],
 ];
 let setSection = 'sound';
 
@@ -2722,6 +2722,7 @@ function setSectionMounted() {
   if (out) out.textContent = '';
   if (setSection === 'ai') { previewEndpoint(); modelHint(); }
   if (setSection === 'sound') { loadVoices(); showCurrentVoice(); renderAudioNow(); }
+  if (setSection === 'update') { renderUpdateStatus(); }
 }
 
 function setSectionHtml() {
@@ -2748,6 +2749,12 @@ function setSectionHtml() {
       ${((state.gate || {}).packages || []).length} 个应用；
       闸门本身${(state.gate || {}).enabled ? '已开' : '未开'}。
     </p>`;
+  if (setSection === 'update') return `
+    <div class="set-h">在线内容更新</div>
+    <p class="set-note">只更新题库、微课和五维题的 JSON。下载前会检查 HTTPS、版本和内容结构；失败会保留当前离线内容。</p>
+    <label class="field"><span>更新清单地址（可选）</span><input id="updateUrl" type="url" value="${esc(settings().contentUpdateUrl || '')}" placeholder="https://你的域名/update-manifest.json"></label>
+    <div class="row"><button class="primary" onclick="checkContentUpdate()">检查更新</button><button class="ghost" onclick="saveContentUpdateUrl()">保存地址</button></div>
+    <p class="set-note" id="updateStatus">尚未检查。</p>`;
   if (setSection === 'data') return `
     <div class="set-h">数据</div>
     <p class="set-note">进度存在这台手机上，同时会自动写一份纯文本备份到「下载」目录——
@@ -2760,7 +2767,7 @@ function setSectionHtml() {
     <p class="set-note" style="margin-top:12px">${backupStatusText()}</p>`;
   if (setSection === 'about') return `
     <div class="set-h">关于</div>
-    <p class="set-note">版本 2.46（versionCode 48）· 离线可用 · 权限 6 个
+    <p class="set-note">版本 2.47（versionCode 49）· 离线可用 · 权限 6 个
     （网络、通知、开机自启、悬浮窗，加两个只对 Android 8 及以下生效的存储权限）。
     <b>没有录音权限</b>：这一版起 App 不录音了，你打字，她出声。安装包约 0.5 MB。</p>
     <p class="set-note">密钥只存在这台手机的本地存储里，不会上传到任何地方，
