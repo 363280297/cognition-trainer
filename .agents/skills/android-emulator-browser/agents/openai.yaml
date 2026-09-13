@@ -1,0 +1,4 @@
+interface:
+  display_name: "Android Emulator Browser"
+  short_description: "Mirror Android Emulator"
+  default_prompt: "Use $android-emulator-browser to mirror an Android emulator or device in the in-app browser."
