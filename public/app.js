@@ -5017,7 +5017,7 @@ function renderTrainingReport() {
   <div class="card"><h3>五维题</h3>${dimRows.length ? dimRows.map(([k,v])=>`<div class="report-row"><span>${esc(k)}</span><span>${v.correct}/${v.seen} · ${Math.round(v.correct/v.seen*100)}%</span></div>`).join('') : '<p class="hint">每日只做一道，完成后这里会记录你的五维迁移情况。</p>'}</div>`;
 }
 
-function updateSettings() { try { return Object.assign({ contentUpdateUrl: 'https://363280297.github.io/cognition-trainer/update-manifest.json' }, JSON.parse(localStorage.getItem('eq-settings-v1') || '{}')); } catch (e) { return { contentUpdateUrl: 'https://363280297.github.io/cognition-trainer/update-manifest.json' }; } }
+function updateSettings() { try { return Object.assign({ contentUpdateUrl: 'https://raw.githubusercontent.com/363280297/cognition-trainer/master/docs/update-manifest.json' }, JSON.parse(localStorage.getItem('eq-settings-v1') || '{}')); } catch (e) { return { contentUpdateUrl: 'https://raw.githubusercontent.com/363280297/cognition-trainer/master/docs/update-manifest.json' }; } }
 function saveContentUpdateUrl() { const u=(document.getElementById('updateUrl')||{}).value||''; const old=updateSettings(); old.contentUpdateUrl=u.trim(); localStorage.setItem('eq-settings-v1',JSON.stringify(old)); renderUpdateStatus('地址已保存'); }
 function renderUpdateStatus(msg) { const el=document.getElementById('updateStatus'); if(el) el.textContent=msg || localStorage.getItem('eq-content-update-status-v1') || '尚未检查。'; renderApkOffer(); }
 function renderApkOffer() { const el=document.getElementById('apkUpdate'); if(!el) return; let p=null; try{p=JSON.parse(localStorage.getItem('eq-apk-update-v1')||'null')}catch(e){}; el.innerHTML=p&&p.url?`<button class="ghost" onclick="installApkUpdate()">下载并安装 APK v${esc(String(p.version||''))}</button>`:''; }
@@ -5245,4 +5245,5 @@ function maybeOfferRestore() {
     toast('已从备份恢复');
   }, 600);
 }
+
 
