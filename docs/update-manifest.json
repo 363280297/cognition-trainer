@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "minAppVersion": "2.47",
+  "contentUrl": "https://363280297.github.io/cognition-trainer/content-package.json",
+  "latestApkVersion": 49,
+  "apkUrl": "https://github.com/363280297/cognition-trainer/releases/download/v2.47/cognition-trainer.apk",
+  "apkSha256": "02DA0427DF683EF8E2C038B83DC548F026DB667B81BC17DB2F3530C21ED9B9AE",
+  "note": "内容包和 APK 均由 GitHub 官方服务托管。"
+}
