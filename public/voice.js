@@ -2768,7 +2768,7 @@ function setSectionHtml() {
     <p class="set-note" style="margin-top:12px">${backupStatusText()}</p>`;
   if (setSection === 'about') return `
     <div class="set-h">关于</div>
-    <p class="set-note">版本 2.48（versionCode 50）· 离线可用 · 权限 7 个
+    <p class="set-note">版本 2.49（versionCode 51）· 离线可用 · 权限 7 个
     （网络、通知、开机自启、悬浮窗，加两个只对 Android 8 及以下生效的存储权限）。
     <b>没有录音权限</b>：这一版起 App 不录音了，你打字，她出声。安装包约 0.5 MB。</p>
     <p class="set-note">密钥只存在这台手机的本地存储里，不会上传到任何地方，

@@ -1127,6 +1127,9 @@ button:active { transform: translateY(1px); }
 .frame-head { display:flex; gap:6px; margin-bottom:14px; }
 .frame-kicker { color:#d5dcf1; font-size:1.05rem; margin:8px 0 18px; }
 .frame-lesson { padding:18px; margin:0 0 16px; border:1px solid rgba(130,155,255,.2); border-radius:8px; background:#171c28; }
+.frame-case { margin:0 0 18px; padding:15px 16px; border:1px solid rgba(130,155,255,.28); border-radius:10px; background:linear-gradient(145deg, rgba(42,52,82,.72), rgba(25,30,44,.94)); box-shadow:0 8px 24px rgba(4,8,20,.16); }
+.frame-case span { display:block; margin-bottom:7px; color:#9eafff; font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
+.frame-case p { margin:0; color:#eef1ff; line-height:1.85; }
 .frame-lesson p { color:#b8c0d1; line-height:1.8; }
 .frame-principle { display:grid; gap:5px; margin:16px 0; padding:13px 14px; border-left:2px solid var(--accent); background:#20283b; border-radius:0 6px 6px 0; }
 .frame-principle span { color:#8995b1; font-size:11px; text-transform:uppercase; letter-spacing:.04em; }
@@ -1172,3 +1175,4 @@ button:active { transform: translateY(1px); }
 .report-row { display:flex; justify-content:space-between; gap:16px; padding:10px 0; border-bottom:1px solid var(--line, rgba(255,255,255,.08)); color:var(--text); }
 .report-row:last-child { border-bottom:0; }
 .report-row b { color:var(--accent, #9ad1c3); }
+
