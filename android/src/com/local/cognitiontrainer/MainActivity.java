@@ -592,6 +592,7 @@ public class MainActivity extends ComponentActivity {
                                      String packagesJson, String summary, int canSkip) {
             Prefs.setTrainingState(MainActivity.this, enabled == 1, met == 1, date,
                     packagesJson, summary, canSkip == 1);
+        GateService.refreshIfComplete();
         }
 
         /**

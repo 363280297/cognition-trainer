@@ -9,6 +9,8 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
+import android.os.Handler;
+import android.os.Looper;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -48,6 +50,7 @@ import java.util.Set;
 public class GateService extends AccessibilityService {
 
     private static final long COOLDOWN_MS = 2500;
+    private static volatile GateService active;
 
     private long lastFire = 0;
     private View overlay;
@@ -223,6 +226,15 @@ public class GateService extends AccessibilityService {
         overlayDate = null;
     }
 
+    /** 网页在主 Activity 中确认当天达标后，立即清掉已经显示的浮层。 */
+    static void refreshIfComplete() {
+        GateService service = active;
+        if (service == null) return;
+        new Handler(Looper.getMainLooper()).post(() -> {
+            if (!Prefs.isArmed(service)) service.hideOverlay();
+        });
+    }
+
     private int dp(int v) {
         return Math.round(v * getResources().getDisplayMetrics().density);
     }
@@ -232,12 +244,14 @@ public class GateService extends AccessibilityService {
 
     @Override
     public void onDestroy() {
+        if (active == this) active = null;
         hideOverlay();
         super.onDestroy();
     }
 
     @Override
     protected void onServiceConnected() {
+        active = this;
         super.onServiceConnected();
         getSharedPreferences(Prefs.NAME, MODE_PRIVATE).edit().putBoolean("service_on", true).apply();
 

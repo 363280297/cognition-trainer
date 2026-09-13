@@ -13,7 +13,7 @@ object Prefs {
     @JvmStatic fun setGate(c: Context, armed: Boolean, packagesJson: String?, summary: String?, canSkip: Boolean) {
         sp(c).edit().putBoolean("gateEnabled", armed).putBoolean("dailyMetVerified", false)
             .putString("packages", packagesJson ?: "[]").putString("gateSummary", summary ?: "")
-            .putBoolean("gateCanSkip", canSkip).putString("gateDate", today(c)).apply()
+            .putBoolean("gateCanSkip", canSkip).putString("gateDate", today(c)).commit()
     }
 
     @JvmStatic fun setTrainingState(c: Context, enabled: Boolean, met: Boolean, date: String?, packagesJson: String?, summary: String?, canSkip: Boolean) {
@@ -21,7 +21,7 @@ object Prefs {
         if (today(c) == date) edit.putBoolean("dailyMet", met).putBoolean("dailyMetVerified", true)
             .putString("dailyDate", date).putString("gateDate", date)
             .putString("gateSummary", summary ?: "").putBoolean("gateCanSkip", canSkip)
-        edit.apply()
+        edit.commit()
     }
 
     @JvmStatic fun gateSummary(c: Context): String {
