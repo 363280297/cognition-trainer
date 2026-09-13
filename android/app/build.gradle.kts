@@ -16,8 +16,8 @@ android {
         applicationId = "com.local.cognitiontrainer"
         minSdk = 26
         targetSdk = 34
-        versionCode = 52
-        versionName = "2.50"
+        versionCode = 53
+        versionName = "2.51"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
