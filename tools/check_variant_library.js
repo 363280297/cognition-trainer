@@ -58,6 +58,17 @@ for (const c of families) {
     assert.ok(b.options.every((o) => !why.has(o.why)), 'reused option rationale');
   });
 }
+check('no template placeholders in authored question fields', () => {
+  const markers = [/换个场景/, /变式\s*[0-9一二三]/, /版本\s*[0-9一二三]/, /这次对话发生在/, /你手边正好/, /第[0-9一二三]种情况/];
+  const fields = ['context', 'quote', 'question', 'explain', 'alt', 'action'];
+  for (const c of cards) for (const f of [c, ...(c.variants || [])]) {
+    for (const key of fields) assert.ok(!markers.some((re) => re.test(String(f[key] || ''))), f.id + ' contains template text in ' + key);
+    for (const o of (f.options || [])) {
+      assert.ok(!markers.some((re) => re.test(String(o.text || ''))), f.id + '.' + o.id + ' contains template text in option');
+      assert.ok(!markers.some((re) => re.test(String(o.why || ''))), f.id + '.' + o.id + ' contains template text in why');
+    }
+  }
+});
 check('expansion', () => {
   if (process.env.REQUIRE_FULL_VARIANTS === '1') {
     assert.ok(cards.length >= 120);
