@@ -5044,8 +5044,10 @@ function checkContentUpdate() {
       updateStatus(`更新完成：内容 v${pkg.version}，进度保留。`); renderHeader(); go('today');
     } catch (e) { updateStatus(`更新失败：${e.message} 当前离线内容仍可用。`); }
   };
-  if (window.EQNative && EQNative.httpGet) EQNative.httpGet(id, u, '{}');
-  else fetch(u).then(r=>r.text().then(body=>window.__contentUpdateDone({status:r.status,body}))).catch(()=>window.__contentUpdateDone({status:0}));
+  if (window.EQNative && EQNative.contentUpdateGet) {
+    window.__onContentUpdate = window.__contentUpdateDone;
+    EQNative.contentUpdateGet(u);
+  } else fetch(u).then(r=>r.text().then(body=>window.__contentUpdateDone({status:r.status,body}))).catch(()=>window.__contentUpdateDone({status:0}));
 }
 
 const VIEWS = {

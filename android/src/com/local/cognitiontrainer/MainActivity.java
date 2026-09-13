@@ -953,6 +953,12 @@ public class MainActivity extends Activity {
             MainActivity.this.httpGet(reqId, url, headersJson);
         }
 
+        /** 内容更新使用独立回调，避免网页更新请求误占 AI 请求的 pending 队列。 */
+        @JavascriptInterface
+        public void contentUpdateGet(String url) {
+            MainActivity.this.contentUpdateGet(url);
+        }
+
         // ---- 背景音乐（用户自己手机里的文件）----
         // 同上：这几个必须在 Bridge 里面，否则网页那边一调用就是
         // "EQNative.musicPlay is not a function"，而且只在真机上炸。
@@ -1128,6 +1134,32 @@ public class MainActivity extends Activity {
             } finally {
                 if (c != null) c.disconnect();
             }
+        }).start();
+    }
+
+    private void contentUpdateGet(final String url) {
+        if (!isAllowedNetworkUrl(url)) {
+            js("window.__onContentUpdate&&window.__onContentUpdate(" + q("{\"status\":400,\"error\":\"仅允许 HTTPS 公网地址\"}") + ")");
+            return;
+        }
+        new Thread(() -> {
+            HttpURLConnection c = null;
+            try {
+                c = (HttpURLConnection) new URL(url).openConnection();
+                c.setRequestMethod("GET"); c.setConnectTimeout(20000); c.setReadTimeout(60000);
+                int code = c.getResponseCode();
+                InputStream in = (code >= 200 && code < 300) ? c.getInputStream() : c.getErrorStream();
+                StringBuilder sb = new StringBuilder();
+                if (in != null) try (BufferedReader r = new BufferedReader(new InputStreamReader(in, "UTF-8"))) {
+                    String line; while ((line = r.readLine()) != null) sb.append(line).append('\n');
+                }
+                JSONObject out = new JSONObject(); out.put("status", code); out.put("body", sb.toString());
+                js("window.__onContentUpdate&&window.__onContentUpdate(" + q(out.toString()) + ")");
+            } catch (Exception e) {
+                JSONObject out = new JSONObject();
+                try { out.put("status", 0); out.put("error", String.valueOf(e.getMessage())); } catch (Exception ignored) { }
+                js("window.__onContentUpdate&&window.__onContentUpdate(" + q(out.toString()) + ")");
+            } finally { if (c != null) c.disconnect(); }
         }).start();
     }
 
