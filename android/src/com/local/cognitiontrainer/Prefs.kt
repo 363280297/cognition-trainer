@@ -40,10 +40,9 @@ object Prefs {
     @JvmStatic fun dailySkipped(c: Context): Boolean =
         sp(c).getString("dailyDate", "") == today(c) && sp(c).getBoolean("dailySkipped", false)
 
-    @JvmStatic fun markDailySkipped(c: Context) {
+    @JvmStatic fun markDailySkipped(c: Context): Boolean =
         sp(c).edit().putBoolean("dailySkipped", true).putString("dailyDate", today(c))
             .putBoolean("gateCanSkip", false).commit()
-    }
 
     @JvmStatic fun setDeepBlock(c: Context, on: Boolean) = sp(c).edit().putBoolean("deepBlock", on).apply()
     @JvmStatic fun deepBlock(c: Context): Boolean = sp(c).getBoolean("deepBlock", false)

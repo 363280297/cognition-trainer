@@ -140,15 +140,20 @@ public class GateService extends AccessibilityService {
             top.addView(title, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
             if (canSkip) {
-                Button skipTop = new Button(this);
-                skipTop.setText("跳过");
-                skipTop.setTextSize(13);
-                skipTop.setAllCaps(false);
-                skipTop.setOnClickListener(v -> {
-                    Prefs.markDailySkipped(GateService.this);
-                    hideOverlay();
+                Button skip = new Button(this);
+                skip.setText("跳过");
+                skip.setTextSize(13);
+                skip.setAllCaps(false);
+                skip.setOnClickListener(v -> {
+                    boolean saved = Prefs.markDailySkipped(GateService.this);
+                    if (saved) {
+                        hideOverlay();
+                    } else {
+                        skip.setText("保存失败");
+                        skip.setEnabled(false);
+                    }
                 });
-                top.addView(skipTop, new LinearLayout.LayoutParams(
+                top.addView(skip, new LinearLayout.LayoutParams(
                         LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
             }
             box.addView(top);

@@ -599,9 +599,10 @@ public class MainActivity extends ComponentActivity {
         public boolean dailySkipped() { return Prefs.dailySkipped(MainActivity.this); }
 
         @JavascriptInterface
-        public void markDailySkipped() {
-            Prefs.markDailySkipped(MainActivity.this);
-            GateService.refreshIfComplete();
+        public boolean markDailySkipped() {
+            boolean saved = Prefs.markDailySkipped(MainActivity.this);
+            if (saved) GateService.refreshIfComplete();
+            return saved;
         }
 
         /**

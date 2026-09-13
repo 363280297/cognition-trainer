@@ -2858,8 +2858,17 @@ function skipDaily() {
   state.daily.skipped = true;
   state.daily.skippedAt = Date.now();
   save();
+  let nativeSaved = true;
   if (window.EQNative && EQNative.markDailySkipped) {
-    try { EQNative.markDailySkipped(); } catch (e) { /* 非 Android 环境 */ }
+    try { nativeSaved = EQNative.markDailySkipped() !== false; } catch (e) { nativeSaved = false; }
+  }
+  if (!nativeSaved) {
+    state.daily.skipped = false;
+    state.daily.skippedAt = null;
+    save();
+    syncGate();
+    toast('跳过状态保存失败，请重试。');
+    return;
   }
   syncGate();
   toast('今天跳过了一次。第二次打开就没有跳过按钮了。');
@@ -5035,7 +5044,7 @@ function validateContentPackage(pkg) {
 function installApkUpdate() {
   let p=null; try{p=JSON.parse(localStorage.getItem('eq-apk-update-v1')||'null')}catch(e){};
   if(!p||!p.url||!p.sha256){updateStatus('更新包信息不完整，先重新检查更新。');return;}
-  window.__onApkUpdate=function(o){ try { if(typeof o==='string') o=JSON.parse(o); } catch(e) { updateStatus('更新回调解析失败。'); return; } if(o.stage==='permission'){updateStatus('请先允许本应用安装未知应用。'); if(window.EQNative&&EQNative.openInstallPermissionSettings) EQNative.openInstallPermissionSettings();} else if(o.stage==='error') updateStatus('APK 更新失败：'+(o.message||'未知错误')); else if(o.stage==='ready') updateStatus('更新包已下载，正在调起系统安装确认。'); else if(o.stage==='downloading') updateStatus(`正在下载 APK：${o.progress>=0?o.progress+'%':'处理中'}`); else if(o.stage==='installing') updateStatus('系统安装确认即将出现。'); };
+  window.__onApkUpdate = function(o){ try { if(typeof o==='string') o=JSON.parse(o); } catch(e) { updateStatus('更新回调解析失败。'); return; } if(o.stage==='permission'){updateStatus('请先允许本应用安装未知应用。'); if(window.EQNative&&EQNative.openInstallPermissionSettings) EQNative.openInstallPermissionSettings();} else if(o.stage==='error') updateStatus('APK 更新失败：'+(o.message||'未知错误')); else if(o.stage==='ready') updateStatus('更新包已下载，正在调起系统安装确认。'); else if(o.stage==='downloading') updateStatus(`正在下载 APK：${o.progress>=0?o.progress+'%':'处理中'}`); else if(o.stage==='installing') updateStatus('系统安装确认即将出现。'); };
   if(window.EQNative&&EQNative.downloadAndInstallApk) EQNative.downloadAndInstallApk(p.url,p.sha256,Number(p.version)||0); else updateStatus('APK 安装功能只在 Android App 内可用。');
 }
 
@@ -5063,7 +5072,10 @@ function checkContentUpdate() {
     } catch (e) { updateStatus(`更新失败：${e.message} 当前离线内容仍可用。`); }
   };
   if (window.EQNative && EQNative.contentUpdateGet) {
-    window.__onContentUpdate = window.__contentUpdateDone;
+    window.__onContentUpdate = function(result) {
+      if (typeof result === 'string') result = JSON.parse(result);
+      return window.__contentUpdateDone(result);
+    };
     EQNative.contentUpdateGet(u);
   } else fetch(u).then(r=>r.text().then(body=>window.__contentUpdateDone({status:r.status,body}))).catch(()=>window.__contentUpdateDone({status:0}));
 }
